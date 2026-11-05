@@ -1,6 +1,6 @@
 {
-  "name": "ひびの手帳",
-  "short_name": "ひびの手帳",
+  "name": "日々の手帳",
+  "short_name": "日々の手帳",
   "description": "予定・タスク・日記をひとつにまとめた手帳アプリ",
   "lang": "ja",
   "start_url": "./",

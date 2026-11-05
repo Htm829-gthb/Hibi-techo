@@ -1,4 +1,4 @@
-// ひびの手帳 service worker — アプリの画面をキャッシュし、電波が弱いときも開けるようにする。
+// 日々の手帳 service worker — アプリの画面をキャッシュし、電波が弱いときも開けるようにする。
 // Google の API への通信はキャッシュしない。
 const CACHE = "hibi-v1";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
