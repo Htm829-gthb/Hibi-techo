@@ -448,8 +448,7 @@ const TASKAPI = "https://tasks.googleapis.com/tasks/v1";
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo";
-// Last.fmのユーザー名とAPIキーは公開リポジトリに入れず、各端末のブラウザにだけ保存する
-let lfm = store.get("hibi-lastfm", null);
+
 
 // ================= helpers =================
 const $ = s => document.querySelector(s);
@@ -1141,6 +1140,8 @@ function initJournal(){ loadEntry(jDate); loadJournal(); loadMusic(jDate); }
 
 // ================= MUSIC (Last.fm) =================
 // Galaxyの記録アプリ（Pano Scrobbler）がApple Musicの再生をLast.fmに記録し、ここでその日の分を数える
+// Last.fmのユーザー名とAPIキーは公開リポジトリに入れず、各端末のブラウザにだけ保存する
+let lfm = store.get("hibi-lastfm", null);
 let musicSeq = 0, musicTop = null;
 const musicCache = {};
 const LFM_PLACEHOLDER = /2a96cbd8b46e442fc41c2b86b821562f/;
