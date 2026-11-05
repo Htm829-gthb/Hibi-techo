@@ -297,6 +297,22 @@ details.donebox summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .past .px{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .past li button[aria-current="true"] .pd{color:var(--accent);font-weight:600}
 .sec-label{font-size:12px;color:var(--muted);letter-spacing:.08em;margin:4px 0 0}
+.music{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.music-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.music-h b{font-weight:600;font-size:14px}
+.music-h small{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tracks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.trk{display:grid;grid-template-columns:20px 44px minmax(0,1fr) auto;align-items:center;gap:10px}
+.trk .rk{font-size:13px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.trk .art{width:44px;height:44px;border-radius:6px;background:var(--line);object-fit:cover;display:block}
+.trk .art.ph{display:grid;place-items:center;color:var(--muted);font-size:18px}
+.trk .tx{min-width:0}
+.trk .tx b{display:block;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trk .tx small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trk .ct{font-size:13px;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.trk.top .tx b{color:var(--accent)}
+.music-f{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.lfm-form{display:flex;flex-direction:column;gap:8px}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;max-width:calc(100% - 32px)}
 </style>
@@ -395,6 +411,17 @@ details.donebox summary{cursor:pointer;font-size:13px;color:var(--muted)}
       </div>
       <textarea id="jText" placeholder="今日のことを自由に書いてください。書いた内容は自動で保存されます。" aria-label="日記の本文"></textarea>
       <div class="jfoot"><span id="jCount">0字</span><span id="jStatus"></span></div>
+      <div class="music" id="music" aria-live="polite">
+        <div class="music-h"><b>この日によく聞いた曲</b><small id="musicMeta"></small></div>
+        <ul class="tracks" id="tracks"><li class="empty">聞いた曲を読み込んでいます…</li></ul>
+        <form class="lfm-form" id="lfmForm" hidden>
+          <p class="note">Last.fmのユーザー名とAPIキーを入れてください。この端末の中だけに保存されます。</p>
+          <input type="text" id="lfmUser" placeholder="ユーザー名" aria-label="Last.fmのユーザー名" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <input type="text" id="lfmKey" placeholder="APIキー" aria-label="Last.fmのAPIキー" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="btn sm primary" type="submit">保存</button>
+        </form>
+        <div class="music-f" id="musicFoot"><button class="btn sm" type="button" id="musicAdd" hidden>1位の曲を日記に書く</button><span style="display:flex;gap:6px"><button class="btn sm" type="button" id="lfmEdit">設定</button><button class="btn sm" type="button" id="musicReload">更新</button></span></div>
+      </div>
       <p class="sec-label">最近の日記</p>
       <ul class="past" id="past"><li class="empty">まだ日記はありません。上の欄に書くと、ここに並びます。</li></ul>
     </section>
@@ -421,6 +448,8 @@ const TASKAPI = "https://tasks.googleapis.com/tasks/v1";
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo";
+// Last.fmのユーザー名とAPIキーは公開リポジトリに入れず、各端末のブラウザにだけ保存する
+let lfm = store.get("hibi-lastfm", null);
 
 // ================= helpers =================
 const $ = s => document.querySelector(s);
@@ -789,7 +818,7 @@ $("#calReload").onclick = () => { if (!calendars.length) initCalendar(); else fe
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible" || !started || !token) return;
   if (calendars.length) fetchRange(true);
-  loadTasks(); if (!dirty && !writing) loadJournal(true);
+  loadTasks(); if (!dirty && !writing) loadJournal(true); if (jDate === TODAY) loadMusic(jDate);
 });
 setInterval(() => { if (document.visibilityState === "visible" && started && token && calendars.length) fetchRange(true); }, 5*60000);
 const writableCals = () => calendars.filter(c => c.writable && !c.holiday);
@@ -1108,7 +1137,103 @@ async function loadJournal(quiet){
     if (!quiet) banner($("#jBanner"), esc(errText(e, "日記を読み込み")));
   }
 }
-function initJournal(){ loadEntry(jDate); loadJournal(); }
+function initJournal(){ loadEntry(jDate); loadJournal(); loadMusic(jDate); }
+
+// ================= MUSIC (Last.fm) =================
+// Galaxyの記録アプリ（Pano Scrobbler）がApple Musicの再生をLast.fmに記録し、ここでその日の分を数える
+let musicSeq = 0, musicTop = null;
+const musicCache = {};
+const LFM_PLACEHOLDER = /2a96cbd8b46e442fc41c2b86b821562f/;
+function lfmImage(t){
+  const imgs = t.image || []; const pick = imgs.find(i => i.size === "large") || imgs.find(i => i.size === "extralarge") || imgs[imgs.length-1];
+  const u = pick?.["#text"] || ""; return u && !LFM_PLACEHOLDER.test(u) && /^https:\/\//.test(u) ? u : "";
+}
+async function fetchPlays(date){
+  const from = Math.floor(parseYmd(date).getTime()/1000), to = Math.floor(addDays(parseYmd(date),1).getTime()/1000);
+  let page = 1, pages = 1, plays = [];
+  do {
+    const q = new URLSearchParams({ method: "user.getrecenttracks", user: lfm.user, api_key: lfm.key, format: "json", from: String(from), to: String(to), limit: "200", page: String(page) });
+    let r;
+    try { r = await fetch("https://ws.audioscrobbler.com/2.0/?" + q); } catch(e){ throw { kind: "network" }; }
+    let j = null; try { j = await r.json(); } catch(e){}
+    if (j?.error) throw { kind: "lfm", code: j.error, message: j.message };
+    if (!r.ok) throw { kind: "http", status: r.status };
+    const rt = j?.recenttracks; const list = rt?.track ? (Array.isArray(rt.track) ? rt.track : [rt.track]) : [];
+    plays = plays.concat(list.filter(t => !t["@attr"]?.nowplaying));
+    pages = Number(rt?.["@attr"]?.totalPages || 1); page++;
+  } while (page <= pages && page <= 10);
+  return plays;
+}
+function tallyPlays(plays){
+  const map = new Map();
+  for (const t of plays){
+    const artist = t.artist?.["#text"] || t.artist?.name || "", name = t.name || "";
+    const k = (artist + "\u0000" + name).toLowerCase();
+    const cur = map.get(k) || { name, artist, album: t.album?.["#text"] || "", img: "", count: 0, last: 0, url: t.url || "" };
+    cur.count++; cur.last = Math.max(cur.last, Number(t.date?.uts || 0)); if (!cur.img) cur.img = lfmImage(t);
+    map.set(k, cur);
+  }
+  return [...map.values()].sort((a,b) => b.count - a.count || b.last - a.last);
+}
+function renderMusic(date, data, err){
+  if (date !== jDate) return;
+  const ul = $("#tracks"), meta = $("#musicMeta"), add = $("#musicAdd");
+  musicTop = null; add.hidden = true;
+  if (err){
+    meta.textContent = "";
+    ul.innerHTML = `<li class="empty">${esc(err)}</li>`; return;
+  }
+  const { top, total } = data;
+  if (!total){
+    meta.textContent = "";
+    ul.innerHTML = `<li class="empty">${date === TODAY ? "今日はまだ記録された曲がありません。Galaxyで聞いた曲が、ここに集計されます。" : "この日に記録された曲はありません。"}</li>`; return;
+  }
+  meta.textContent = `合計${total}回再生`;
+  ul.innerHTML = top.slice(0, 5).map((t,i) => `<li class="trk${i===0?" top":""}"><span class="rk">${i+1}</span>${t.img ? `<img class="art" src="${esc(t.img)}" alt="" loading="lazy">` : `<span class="art ph" aria-hidden="true">♪</span>`}<span class="tx"><b>${esc(t.name)}</b><small>${esc(t.artist)}${t.album ? " · " + esc(t.album) : ""}</small></span><span class="ct">${t.count}回</span></li>`).join("");
+  musicTop = top[0]; add.hidden = false;
+}
+function showLfmForm(show){
+  $("#lfmForm").hidden = !show; $("#tracks").hidden = show; $("#musicFoot").hidden = show && !lfm;
+  if (show){ $("#lfmUser").value = lfm?.user || ""; $("#lfmKey").value = ""; $("#lfmKey").placeholder = lfm ? "APIキー（変えない場合は空欄）" : "APIキー"; }
+}
+async function loadMusic(date, force){
+  if (!lfm){ showLfmForm(true); return; }
+  const seq = ++musicSeq;
+  if (!force && musicCache[date] && (date !== TODAY || Date.now() - musicCache[date].at < 5*60000)){ renderMusic(date, musicCache[date]); return; }
+  if (date === jDate){ $("#tracks").innerHTML = `<li class="empty">聞いた曲を読み込んでいます…</li>`; $("#musicMeta").textContent = ""; $("#musicAdd").hidden = true; }
+  try {
+    const plays = await fetchPlays(date);
+    if (seq !== musicSeq) return;
+    const top = tallyPlays(plays);
+    musicCache[date] = { top, total: plays.length, at: Date.now() };
+    renderMusic(date, musicCache[date]);
+  } catch(e){
+    if (seq !== musicSeq) return;
+    const msg = e.kind === "network" ? "Last.fmにつながりませんでした。電波の状況を確認して「更新」を押してください。"
+      : e.code === 6 ? "Last.fmのユーザーが見つかりません。ユーザー名を確認してください。"
+      : e.code === 10 || e.code === 26 ? "Last.fmのAPIキーが使えません。キーを確認してください。"
+      : e.code === 17 ? "Last.fmで「最近聞いた曲」が非公開になっています。Last.fmのプライバシー設定で公開にしてください。"
+      : e.code === 29 ? "Last.fmへの問い合わせが多すぎました。少し待ってから「更新」を押してください。"
+      : "聞いた曲を読み込めませんでした。少し待ってから「更新」を押してください。";
+    renderMusic(date, null, msg);
+  }
+}
+$("#musicReload").onclick = () => loadMusic(jDate, true);
+$("#lfmEdit").onclick = () => showLfmForm($("#lfmForm").hidden);
+$("#lfmForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const user = $("#lfmUser").value.trim(), key = $("#lfmKey").value.trim() || lfm?.key || "";
+  if (!user || !/^[0-9a-f]{32}$/i.test(key)){ toast("ユーザー名と、32文字のAPIキーを入れてください"); return; }
+  lfm = { user, key }; store.set("hibi-lastfm", lfm);
+  for (const k in musicCache) delete musicCache[k];
+  showLfmForm(false); loadMusic(jDate, true);
+});
+$("#musicAdd").onclick = () => {
+  const t = musicTop; if (!t) return;
+  const ta = $("#jText"); const pre = ta.value && !ta.value.endsWith("\n") ? "\n\n" : "";
+  ta.value += `${pre}【今日の1曲】${t.name} / ${t.artist}（${t.count}回）\n`;
+  countChars(); scheduleSave(800); toast("日記に書きました");
+};
 async function save(){
   clearTimeout(saveT);
   if (!dirty) return;
@@ -1138,7 +1263,7 @@ $("#prompts").addEventListener("click", e => {
   const ta = $("#jText"); const pre = ta.value && !ta.value.endsWith("\n") ? "\n\n" : "";
   ta.value += `${pre}【${b.dataset.p}】\n`; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); countChars(); scheduleSave(1500);
 });
-async function goDate(date){ if (!date) return; if (dirty) await save(); jDate = date; $("#jDate").value = date; loadEntry(date); }
+async function goDate(date){ if (!date) return; if (dirty) await save(); jDate = date; $("#jDate").value = date; loadEntry(date); loadMusic(date); }
 $("#jDate").addEventListener("change", e => goDate(e.target.value));
 $("#jPrev").onclick = () => goDate(ymd(addDays(parseYmd(jDate), -1)));
 $("#jNext").onclick = () => goDate(ymd(addDays(parseYmd(jDate), 1)));
