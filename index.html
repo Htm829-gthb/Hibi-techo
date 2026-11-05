@@ -556,6 +556,15 @@ function rangeFor(){
   }
   return null;
 }
+// Googleカレンダーの色の名前（色味はGoogleの画面から読み取ったおおよその値。名前を付けるためだけに使う）
+const GNAMES = [["ワイン","#C94C74"],["ローズ","#EF5881"],["フラミンゴ","#F39886"],["トマト","#F2562E"],["ミカン","#FF7A42"],["カボチャ","#FF8537"],["マンゴー","#FF9F3E"],["バナナ","#FBCE51"],["レモン","#EBD25E"],["アボカド","#CED75A"],["ピスタチオ","#9AC462"],["バジル","#489D66"],["セージ","#5FCC95"],["ユーカリ","#43AE9C"],["ピーコック","#58B0F8"],["コバルト","#6E98FA"],["ラベンダー","#939CDD"],["ブルーベリー","#6C70D1"],["ライラック","#BFABE8"],["アメジスト","#B682C2"],["ブドウ","#A755C1"],["ココア","#936E5E"],["グラファイト","#616161"],["シラカバ","#BDAE9B"]];
+const rgbOf = h => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h||""); return m ? m.slice(1).map(x => parseInt(x,16)) : null; };
+function colorName(hex){
+  const c = rgbOf(hex); if (!c) return "";
+  let best = null, bd = Infinity;
+  for (const [n,h] of GNAMES){ const g = rgbOf(h); const d = (c[0]-g[0])**2*2 + (c[1]-g[1])**2*4 + (c[2]-g[2])**2*3; if (d < bd){ bd = d; best = n; } }
+  return best;
+}
 const HEX = /^#?[0-9a-fA-F]{6}$/;
 const toHex = n => pad2(Math.round(Math.max(0, Math.min(255, n))).toString(16));
 const pad2 = s => s.length < 2 ? "0"+s : s;
@@ -825,7 +834,8 @@ function renderView(confirmDel){
     <div class="when"><span>${esc(d1)}</span><b>${esc(d2)}</b></div>
     ${miniTimeline(x)}
     <div class="grp">
-      <div class="row" style="--c:${x.color}"><span>カレンダー</span><span class="val"><i class="dot"></i>${esc(x.cal.name)}</span></div>
+      <div class="row"><span>カレンダー</span><span class="val">${esc(x.cal.name)}</span></div>
+      <div class="row" style="--c:${x.color}"><span>色</span><span class="val"><i class="dot"></i>${esc(colorName(x.color))}</span></div>
       ${x.raw.location?`<div class="row"><span>場所</span><span class="val">${esc(x.raw.location)}</span></div>`:""}
       ${x.raw.recurringEventId?`<div class="row"><span>繰り返し</span><span class="val">繰り返す予定</span></div>`:""}
       ${link}
@@ -883,7 +893,7 @@ function renderEdit(x){
     </div>
     <div class="grp">
       ${isNew && cals.length > 1 ? `<div class="row"><span>カレンダー</span><select id="edCal" aria-label="カレンダー">${cals.map(c => `<option value="${esc(c.id)}" ${c.id===base.cal?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>` : ""}
-      <div class="row block"><span>色</span><span class="sw" id="edSw"><button type="button" class="def" data-c="" aria-label="カレンダーの色">標準</button>${ids.map(k => `<button type="button" data-c="${k}" style="--c:${palette[k].background}" aria-label="色 ${k}"></button>`).join("")}</span></div>
+      <div class="row block"><span>色</span><span class="sw" id="edSw"><button type="button" class="def" data-c="" aria-label="カレンダーの色">標準</button>${ids.map(k => `<button type="button" data-c="${k}" style="--c:${palette[k].background}" aria-label="${colorName(palette[k].background)||"色 "+k}" title="${colorName(palette[k].background)}"></button>`).join("")}</span></div>
       <div class="row"><span>通知</span><select id="edRem" aria-label="通知">${REMIND.map(([v,l]) => `<option value="${v}" ${v===base.rem?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
     <div class="grp"><textarea id="edMemo" placeholder="メモ" aria-label="メモ">${esc(base.memo)}</textarea></div>
