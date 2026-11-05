@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ひびの手帳</title>
+<meta name="theme-color" content="#F1F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11151B" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap">
+<style>
+/* ひびの手帳（本格版）— スマホ基準。上に日付と要約、タブで「予定・タスク・日記」。広い画面ではカレンダー全幅＋下に2列 */
+:root{
+  --bg:#F1F4F7; --surface:#FFFFFF; --ink:#18212E; --muted:#5A6576; --line:#DCE2EA; --weekend:#F5F7FA;
+  --accent:#2C5A87; --accent-ink:#FFFFFF; --accent-soft:#E2EBF4;
+  --leaf:#3B7A57; --leaf-soft:#E3F0E8; --warn:#A8412A; --warn-soft:#F7E6E1;
+  --today:#C8402E; --today-ink:#FFFFFF; --scrim:rgba(16,22,30,.42);
+  --shadow:0 1px 2px rgba(24,33,46,.06),0 4px 16px rgba(24,33,46,.05);
+  --f-body:"Klee One","Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#11151B; --surface:#192029; --ink:#E5E9EF; --muted:#98A3B2; --line:#29323E; --weekend:#151B23;
+  --accent:#86AEDB; --accent-ink:#0F1722; --accent-soft:#1E2B3B;
+  --leaf:#72C092; --leaf-soft:#1B2E24; --warn:#E89279; --warn-soft:#3A2520;
+  --today:#E2604C; --today-ink:#FFFFFF; --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{overflow-x:hidden;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-text-size-adjust:100%;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+body.lock{overflow:hidden}
+img{max-width:100%}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:14px;min-width:0}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted)}
+.today{font-weight:600;font-size:clamp(26px,7vw,40px);line-height:1.15;margin:2px 0 0}
+.today small{font-size:.5em;color:var(--muted);margin-left:.4em}
+.wareki{font-size:13px;color:var(--muted);margin-top:2px}
+.summary{display:flex;flex-wrap:wrap;gap:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.pill b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.pill.ok{background:var(--leaf-soft);border-color:transparent;color:var(--leaf)}
+.pill.ok b{color:var(--leaf)}
+
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.tabs button{border:0;background:transparent;padding:9px 4px;border-radius:9px;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+
+.grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:600px){ .panel{padding:18px;gap:14px} }
+.panel h2{font-weight:600;font-size:20px;margin:0;display:flex;align-items:baseline;gap:10px}
+.panel h2 span{font-size:12px;color:var(--muted);letter-spacing:.06em;font-weight:400}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+@media (max-width:899px){
+  .grid .panel{display:none}
+  .app[data-tab="cal"] .panel[data-panel="cal"],
+  .app[data-tab="tasks"] .panel[data-panel="tasks"],
+  .app[data-tab="journal"] .panel[data-panel="journal"]{display:flex}
+}
+@media (min-width:900px){
+  .tabs{display:none}
+  .grid{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);align-items:start}
+  .panel[data-panel="cal"]{grid-column:1/-1}
+}
+
+.login{max-width:520px;margin:8vh auto 0;text-align:left;gap:14px}
+.login h2{font-size:22px}
+.login ol{margin:0;padding-left:1.3em;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:4px}
+.gbtn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 20px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);font-size:15px}
+.gbtn svg{width:18px;height:18px}
+
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 14px;border-radius:9px;cursor:pointer;font-size:14px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sm{padding:4px 10px;font-size:13px}
+input[type=text],input[type=date],input[type=time],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;min-width:0}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.banner{font-size:13px;padding:10px 12px;border-radius:10px;background:var(--warn-soft);color:var(--ink);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.banner.info{background:var(--accent-soft)}
+.empty{font-size:14px;color:var(--muted);padding:6px 0}
+.foot{display:flex;justify-content:center;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.foot button{border:0;background:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0}
+
+/* ===== calendar ===== */
+.calwrap{container-type:inline-size;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ctool{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title nav" "seg seg";gap:8px;align-items:center}
+.ctitle{grid-area:title;font-weight:600;font-size:21px;line-height:1.2;margin:0;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ctitle small{font-size:.66em;color:var(--muted);font-weight:400;margin-left:6px}
+.cnav{grid-area:nav;display:flex;align-items:center;gap:4px}
+.ibtn{border:1px solid var(--line);background:var(--surface);min-width:34px;height:34px;padding:0 9px;border-radius:999px;cursor:pointer;font-size:14px;display:grid;place-items:center}
+.ibtn.add{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-size:20px;line-height:1}
+.seg{grid-area:seg;display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;padding:5px 0;border-radius:999px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.cmeta{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.cmeta button{border:0;background:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0}
+@container (min-width:720px){
+  .ctool{grid-template-columns:minmax(0,1fr) 300px auto;grid-template-areas:"title seg nav"}
+  .ctitle{font-size:24px}
+}
+
+.chip{--c:#039BE5;--on:#fff;display:block;font-size:12px;line-height:1.45;padding:1px 6px;border:0;border-radius:4px;background:var(--c);color:var(--on);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-align:left;width:100%;min-width:0;max-width:100%}
+.line-ev{--c:#039BE5;display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;line-height:1.5;padding:0 2px;border:0;cursor:pointer;background:none;width:100%;min-width:0;max-width:100%;text-align:left;color:var(--ink)}
+.line-ev::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c);flex:0 0 auto}
+.line-ev span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.line-ev time{color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+
+.mhead,.mgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.mhead div{text-align:center;padding:0 0 4px;font-size:12px;color:var(--muted)}
+.mhead div:nth-child(6){color:var(--accent)} .mhead div:nth-child(7){color:var(--today)}
+.mgrid{border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.mcell{border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-height:84px;padding:2px 2px 4px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;cursor:pointer;background:var(--surface)}
+.mcell.we{background:var(--weekend)}
+.mcell.out > *{opacity:.45}
+.dn{align-self:center;font-size:13px;font-variant-numeric:tabular-nums;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;flex:0 0 auto}
+.mcell.sat .dn{color:var(--accent)} .mcell.sun .dn,.mcell.holi .dn{color:var(--today)}
+.mcell.is-today .dn{background:var(--today);color:var(--today-ink);font-weight:600}
+.evs{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mcell .chip,.mcell .line-ev{font-size:10.5px;line-height:1.35;padding:0 2px 0 3px;text-overflow:clip}
+.mcell .line-ev time{display:none}
+.mcell .line-ev::before{width:5px;height:5px}
+.more{font-size:10px;color:var(--muted);padding-left:3px;white-space:nowrap}
+@container (min-width:640px){
+  .mcell{min-height:108px;padding:4px 5px 6px}
+  .dn{align-self:flex-end;font-size:15px;width:28px;height:28px}
+  .mhead div{text-align:right;padding:0 8px 6px;font-size:13px}
+  .mcell .chip,.mcell .line-ev{font-size:12px;line-height:1.45;padding:1px 4px 1px 5px;text-overflow:ellipsis}
+  .mcell .line-ev time{display:inline}
+  .mcell .line-ev::before{width:7px;height:7px}
+}
+
+.strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.strip button{border:0;background:none;cursor:pointer;padding:2px 0;border-radius:8px;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--ink);min-width:0}
+.strip button small{font-size:11px;color:var(--muted)}
+.strip button b{font-weight:400;font-size:15px;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;font-variant-numeric:tabular-nums}
+.strip button.sel b{background:var(--ink);color:var(--surface);font-weight:600}
+.strip button.is-today b{color:var(--today);font-weight:600}
+.strip button.sel.is-today b{background:var(--today);color:var(--today-ink)}
+
+.tg{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface);min-width:0}
+.tg-head,.tg-allday,.tg-body-inner{display:grid;grid-template-columns:36px repeat(var(--n),minmax(0,1fr))}
+@container (min-width:640px){ .tg-head,.tg-allday,.tg-body-inner{grid-template-columns:52px repeat(var(--n),minmax(0,1fr))} }
+.tg-head{border-bottom:1px solid var(--line)}
+.tg-head div{padding:4px 0;text-align:center;font-variant-numeric:tabular-nums;cursor:pointer;min-width:0;overflow:hidden;line-height:1.25}
+.tg-head small{display:block;font-size:10px;color:var(--muted)}
+.tg-head b{display:inline-grid;place-items:center;font-weight:400;font-size:14px;min-width:24px;height:24px;border-radius:999px;padding:0 4px}
+.tg-head div.is-today b{background:var(--today);color:var(--today-ink);font-weight:600}
+.tg-allday{border-bottom:1px solid var(--line);min-height:24px}
+.tg-allday > div{padding:2px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;border-left:1px solid var(--line)}
+.tg-allday > div:first-child{border-left:0;font-size:10px;color:var(--muted);justify-content:center;align-items:center;padding:0}
+.tg-allday .chip{font-size:10.5px;padding:0 3px}
+.tg-body{height:min(600px,64vh);overflow-y:auto;position:relative;overscroll-behavior:contain}
+.tg-body-inner{position:relative;height:calc(44px*24 + 12px)}
+.hours{position:relative}
+.hours span{position:absolute;right:4px;font-size:10px;color:var(--muted);transform:translateY(-50%);font-variant-numeric:tabular-nums}
+.col{position:relative;border-left:1px solid var(--line);min-width:0}
+.col.we{background:var(--weekend)}
+.hl{position:absolute;left:0;right:0;border-top:1px solid var(--line);pointer-events:none}
+.blk{--c:#039BE5;--on:#fff;position:absolute;border:0;border-radius:4px;padding:1px 3px;overflow:hidden;cursor:pointer;background:var(--c);color:var(--on);font-size:10.5px;line-height:1.3;text-align:left;
+  box-shadow:0 0 0 1px var(--surface);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
+.blk b{font-weight:600;overflow-wrap:anywhere;word-break:break-all}
+.blk small{font-size:10px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg.one .blk{font-size:13px;padding:3px 8px}
+.tg.one .blk b{word-break:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg.one .blk small{font-size:12px}
+@container (min-width:640px){ .blk{font-size:12px;padding:2px 5px} .blk b{word-break:normal} }
+.nowline{position:absolute;left:0;right:0;border-top:2px solid var(--today);z-index:3;pointer-events:none}
+.nowline::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:var(--today)}
+.nowtag{position:absolute;right:1px;transform:translateY(-50%);background:var(--today);color:var(--today-ink);font-size:10px;border-radius:999px;padding:0 4px;z-index:4;font-variant-numeric:tabular-nums}
+
+.ygrid{display:grid;gap:16px 14px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@container (min-width:560px){ .ygrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 22px} }
+@container (min-width:900px){ .ygrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 28px} }
+.ymon h4{margin:0 0 4px;font-size:16px;font-weight:600;cursor:pointer}
+.ymon.cur h4{color:var(--today)}
+.ydays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:11px;font-variant-numeric:tabular-nums;row-gap:1px}
+.ydays .wd{color:var(--muted);font-size:9px}
+.ydays button{border:0;background:none;padding:0;cursor:pointer;height:20px;display:grid;place-items:center;border-radius:50%;font-size:11px;color:var(--ink)}
+.ydays button.is-today{background:var(--today);color:var(--today-ink);font-weight:600;width:20px;margin:0 auto}
+
+/* ===== sheet ===== */
+.scrim{position:fixed;inset:0;z-index:30;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
+.sheet{background:var(--bg);width:100%;max-width:480px;max-height:90vh;max-height:90dvh;overflow-y:auto;overscroll-behavior:contain;border-radius:18px 18px 0 0;
+  padding:14px 14px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+@media (min-width:700px){ .scrim{align-items:center;padding:24px} .sheet{border-radius:18px;padding-bottom:18px} }
+@media (prefers-reduced-motion:no-preference){ .sheet{animation:up .22s ease-out} @keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}} }
+.sh-top{display:flex;align-items:flex-start;gap:10px}
+.sh-top h3{flex:1;margin:0;font-size:20px;font-weight:600;line-height:1.35;overflow-wrap:anywhere;min-width:0}
+.sh-bar{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;gap:8px}
+.sh-bar h3{margin:0;text-align:center;font-size:16px;font-weight:600}
+.round{width:40px;height:40px;border-radius:50%;border:0;background:var(--surface);cursor:pointer;font-size:18px;display:grid;place-items:center;box-shadow:var(--shadow)}
+.round.ok{background:var(--accent);color:var(--accent-ink)}
+.round:disabled{opacity:.45}
+.pillbtn{border:0;background:var(--surface);border-radius:999px;padding:6px 16px;cursor:pointer;font-weight:600;box-shadow:var(--shadow);flex:0 0 auto}
+.when{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;font-size:15px}
+.when b{font-weight:600;font-variant-numeric:tabular-nums}
+.mini{position:relative;border-radius:12px;background:var(--surface);overflow:hidden;border:1px solid var(--line)}
+.mini .hl{left:48px}
+.mini .lab{position:absolute;left:6px;width:38px;text-align:right;font-size:11px;color:var(--muted);transform:translateY(-50%);font-variant-numeric:tabular-nums}
+.mini .area{position:absolute;left:52px;right:8px;top:0;bottom:0}
+.mini .blk{font-size:11px;opacity:.4}
+.mini .blk.me{opacity:1}
+.grp{background:var(--surface);border-radius:12px;display:flex;flex-direction:column}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;min-height:46px;border-top:1px solid var(--line);min-width:0}
+.row:first-child{border-top:0}
+.row > span:first-child{flex:0 0 auto}
+.row .val{color:var(--muted);text-align:right;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.row .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:0 0 auto}
+.row.block{display:block}
+.row.block p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);font-size:14px}
+.row.block small{color:var(--muted);font-size:12px}
+.row a{color:var(--accent)}
+.row select{width:auto;max-width:60%;border:0;background:var(--bg);padding:6px 8px;border-radius:8px}
+.danger{border:0;background:var(--surface);color:var(--warn);border-radius:999px;padding:9px 20px;cursor:pointer;align-self:center;font-weight:600;box-shadow:var(--shadow)}
+.confirm{background:var(--warn-soft);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.confirm div{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.confirm .btn.del{background:var(--warn);color:var(--surface);border-color:var(--warn);font-weight:600}
+.grp input[type=text],.grp textarea{border:0;background:transparent;border-radius:0;padding:12px 14px;border-top:1px solid var(--line)}
+.grp input[type=text]:first-child{border-top:0}
+.grp input:focus,.grp textarea:focus{outline:none;background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+.grp textarea{min-height:110px;resize:vertical}
+.dt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.dt input{width:auto;background:var(--bg);border:0;border-radius:8px;padding:6px 8px;font-variant-numeric:tabular-nums}
+.dt input[type=date]{max-width:150px} .dt input[type=time]{max-width:110px}
+.switch{position:relative;width:50px;height:30px;flex:0 0 auto}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch i{position:absolute;inset:0;border-radius:999px;background:var(--line);pointer-events:none;transition:background .15s}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+.switch input:checked + i{background:var(--leaf)}
+.switch input:checked + i::after{transform:translateX(20px)}
+.switch input:focus-visible + i{outline:2px solid var(--accent);outline-offset:2px}
+.sw{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;margin-top:8px}
+.sw button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;background:var(--c);cursor:pointer;padding:0}
+.sw button[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+.sw button.def{background:var(--surface);border:1px dashed var(--muted);font-size:11px;width:auto;padding:0 10px;border-radius:999px;color:var(--muted)}
+.sw button.def[aria-pressed="true"]{border:2px solid var(--ink);color:var(--ink)}
+.sh-msg{font-size:13px;color:var(--warn);margin:0}
+details.diag{font-size:12px;color:var(--muted)}
+details.diag pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border-radius:8px;padding:8px;margin:6px 0 0;font-size:11px}
+
+/* tasks */
+.addtask{display:flex;gap:8px;flex-wrap:wrap}
+.addtask input[type=text]{flex:1 1 180px}
+.addtask input[type=date]{flex:0 1 150px}
+.tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.task{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.task:first-child{border-top:0}
+.task.sub{padding-left:26px}
+.task .box{flex:0 0 auto;width:22px;height:22px;margin-top:1px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;cursor:pointer;display:grid;place-items:center;padding:0}
+.task.done .box{background:var(--leaf);border-color:var(--leaf)}
+.task.done .box::after{content:"";width:6px;height:11px;border:solid var(--surface);border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+.task .tt{flex:1;min-width:0;overflow-wrap:anywhere}
+.task .tt small{display:block;color:var(--muted);font-size:12px;white-space:pre-wrap}
+.task.done .tt{color:var(--muted);text-decoration:line-through}
+.due{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.due.over{background:var(--warn-soft);color:var(--warn)}
+.due.today{background:var(--leaf-soft);color:var(--leaf)}
+.del{border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px}
+.del:hover{color:var(--warn)}
+details.donebox summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.ph select{width:auto;max-width:60%;padding:5px 8px}
+
+/* journal */
+.jbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.jbar input[type=date]{width:auto}
+.moods{display:flex;flex-wrap:wrap;gap:6px}
+.mood{border:1px solid var(--line);background:var(--bg);padding:4px 11px;border-radius:999px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.mood i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mood[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.prompts{display:flex;flex-wrap:wrap;gap:6px}
+.prompts button{border:1px dashed var(--line);background:transparent;border-radius:8px;padding:3px 10px;font-size:12px;color:var(--muted);cursor:pointer}
+#jText{min-height:220px;resize:vertical;line-height:1.85;background:
+  repeating-linear-gradient(to bottom,transparent 0,transparent calc(1.85em - 1px),var(--line) calc(1.85em - 1px),var(--line) 1.85em) var(--bg);
+  background-attachment:local;padding-top:6px}
+.jfoot{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.past{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.past li button{width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:8px 2px;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px}
+.past li:first-child button{border-top:0}
+.past .pd{font-size:13px;white-space:nowrap}
+.past .px{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.past li button[aria-current="true"] .pd{color:var(--accent);font-weight:600}
+.sec-label{font-size:12px;color:var(--muted);letter-spacing:.08em;margin:4px 0 0}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;max-width:calc(100% - 32px)}
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="wrap app" id="app" data-tab="cal">
+  <header class="head">
+    <div>
+      <div class="eyebrow">ひびの手帳</div>
+      <h1 class="today" id="todayLabel">今日</h1>
+      <div class="wareki" id="wareki"></div>
+    </div>
+    <div class="summary" id="summary" aria-label="今日の要約" hidden>
+      <span class="pill">今日の予定 <b id="sumEv">–</b></span>
+      <span class="pill">未完了タスク <b id="sumTask">–</b></span>
+      <span class="pill" id="sumJournalPill">日記 <b id="sumJournal">–</b></span>
+    </div>
+  </header>
+
+  <section class="panel login" id="loginPanel">
+    <h2>Googleでログイン</h2>
+    <p class="note">予定・タスク・日記は、すべてあなたのGoogleアカウントの中に保存されます。</p>
+    <ol>
+      <li>「Googleはこのアプリを確認していません」と出たら、「詳細」→「ひびの手帳（安全ではないページ）に移動」を押します。</li>
+      <li>カレンダー・タスク・ドライブのアクセスを、すべて許可してください。</li>
+    </ol>
+    <div id="loginBanner" hidden></div>
+    <button class="gbtn" type="button" id="loginBtn">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+      Googleでログイン
+    </button>
+  </section>
+
+  <div id="appBody" hidden style="display:contents">
+  <nav class="tabs" role="tablist" aria-label="表示切替">
+    <button role="tab" data-tab="cal" aria-selected="true">予定</button>
+    <button role="tab" data-tab="tasks" aria-selected="false">タスク</button>
+    <button role="tab" data-tab="journal" aria-selected="false">日記</button>
+  </nav>
+  <div id="authBanner" hidden></div>
+
+  <main class="grid">
+    <section class="panel" data-panel="cal" aria-label="予定">
+      <div class="calwrap" id="calwrap">
+        <div class="ctool">
+          <h2 class="ctitle" id="cTitle">カレンダー</h2>
+          <div class="seg" role="group" aria-label="表示の切替">
+            <button type="button" data-v="day" aria-pressed="false">日</button>
+            <button type="button" data-v="week" aria-pressed="false">週</button>
+            <button type="button" data-v="month" aria-pressed="true">月</button>
+            <button type="button" data-v="year" aria-pressed="false">年</button>
+          </div>
+          <div class="cnav">
+            <button class="ibtn" type="button" id="cPrev" aria-label="前へ">‹</button>
+            <button class="ibtn" type="button" id="cToday">今日</button>
+            <button class="ibtn" type="button" id="cNext" aria-label="次へ">›</button>
+            <button class="ibtn add" type="button" id="cAdd" aria-label="予定を追加">＋</button>
+          </div>
+        </div>
+        <div id="calBanner" hidden></div>
+        <div id="calView"><p class="empty">予定を読み込んでいます…</p></div>
+        <div class="cmeta"><span id="calUpdated"></span><button type="button" id="calReload">再読み込み</button></div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="tasks" aria-labelledby="h-tasks">
+      <div class="ph"><h2 id="h-tasks">タスク <span>Googleタスク</span></h2><select id="taskList" aria-label="リスト"></select></div>
+      <div id="taskBanner" hidden></div>
+      <form class="addtask" id="taskForm">
+        <input type="text" id="taskTitle" placeholder="やることを入力" aria-label="新しいタスク" required>
+        <input type="date" id="taskDue" aria-label="期限（任意）">
+        <button class="btn primary" type="submit" id="taskAddBtn">追加</button>
+      </form>
+      <ul class="tasks" id="openTasks"><li class="empty">タスクを読み込んでいます…</li></ul>
+      <details class="donebox" id="doneBox" hidden>
+        <summary id="doneSummary">完了済み</summary>
+        <ul class="tasks" id="doneTasks"></ul>
+      </details>
+    </section>
+
+    <section class="panel" data-panel="journal" aria-labelledby="h-journal">
+      <div class="ph"><h2 id="h-journal">日記 <span>Googleドライブに保存</span></h2></div>
+      <div id="jBanner" hidden></div>
+      <div class="jbar">
+        <button class="btn sm" type="button" id="jPrev" aria-label="前の日">←</button>
+        <input type="date" id="jDate" aria-label="日付">
+        <button class="btn sm" type="button" id="jNext" aria-label="次の日">→</button>
+        <button class="btn sm" type="button" id="jToday">今日</button>
+      </div>
+      <div class="moods" id="moods" role="group" aria-label="今日の気分"></div>
+      <div class="prompts" id="prompts">
+        <button type="button" data-p="よかったこと">＋ よかったこと</button>
+        <button type="button" data-p="学んだこと">＋ 学んだこと</button>
+        <button type="button" data-p="明日やること">＋ 明日やること</button>
+      </div>
+      <textarea id="jText" placeholder="今日のことを自由に書いてください。書いた内容は自動で保存されます。" aria-label="日記の本文"></textarea>
+      <div class="jfoot"><span id="jCount">0字</span><span id="jStatus"></span></div>
+      <p class="sec-label">最近の日記</p>
+      <ul class="past" id="past"><li class="empty">まだ日記はありません。上の欄に書くと、ここに並びます。</li></ul>
+    </section>
+  </main>
+  <div class="foot"><span id="acct"></span><button type="button" id="logoutBtn">ログアウト</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="予定"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+"use strict";
+// ================= CONFIG =================
+const CLIENT_ID = "715319513264-au4jv0t3fvbdm6g4p1iads1rclu87gu9.apps.googleusercontent.com";
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/tasks",
+  "https://www.googleapis.com/auth/drive.appdata",
+].join(" ");
+const CALAPI = "https://www.googleapis.com/calendar/v3";
+const TASKAPI = "https://tasks.googleapis.com/tasks/v1";
+const DRIVE = "https://www.googleapis.com/drive/v3";
+const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo";
+
+// ================= helpers =================
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const WD = "日月火水木金土";
+const WD_MON = ["月","火","水","木","金","土","日"];
+const parseYmd = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const sod = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const mdw = d => `${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）`;
+const ymdw = d => `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const hm = d => `${d.getHours()}:${pad(d.getMinutes())}`;
+const hm2 = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const mondayOf = d => { const x = sod(d); return addDays(x, -((x.getDay()+6)%7)); };
+const isWE = d => d.getDay()===0 || d.getDay()===6;
+const htmlToText = h => { const t = document.createElement("div"); t.innerHTML = String(h||"").replace(/<br\s*\/?>/gi,"\n").replace(/<\/(p|div|li)>/gi,"\n"); return (t.textContent||"").replace(/\n{3,}/g,"\n\n").trim(); };
+const store = { get(k, d){ try { const v = localStorage.getItem(k); return v==null ? d : JSON.parse(v); } catch(e){ return d; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
+function onColor(hex){
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||""); if (!m) return "#fff";
+  const [r,g,b] = m.slice(1).map(x => parseInt(x,16)/255).map(c => c<=.03928 ? c/12.92 : Math.pow((c+.055)/1.055,2.4));
+  return (0.2126*r+0.7152*g+0.0722*b) > 0.5 ? "#1F1F1F" : "#FFFFFF";
+}
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, 2600); }
+function banner(el, html, kind){ if(!html){ el.hidden=true; el.innerHTML=""; return; } el.className = "banner" + (kind==="info"?" info":""); el.innerHTML=html; el.hidden=false; }
+
+const now0 = new Date();
+const TODAY = ymd(now0);
+$("#todayLabel").innerHTML = `${now0.getMonth()+1}月${now0.getDate()}日<small>${WD[now0.getDay()]}曜日</small>`;
+$("#wareki").textContent = `令和${now0.getFullYear()-2018}年`;
+
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  $("#app").dataset.tab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x===b)));
+  store.set("hibi-tab", b.dataset.tab);
+}));
+{ const t = store.get("hibi-tab", null); if (t) document.querySelector(`.tabs button[data-tab="${t}"]`)?.click(); }
+
+// ================= AUTH =================
+let token = null, tokenExp = 0, tokenClient = null, pendingAuth = [];
+{ const s = store.get("hibi-token", null); if (s && s.exp > Date.now() + 60000){ token = s.t; tokenExp = s.exp; } }
+function gisReady(){ return !!(window.google && google.accounts && google.accounts.oauth2); }
+function initClient(){
+  if (tokenClient || !gisReady()) return !!tokenClient;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES, prompt: "",
+    callback: resp => {
+      if (resp.error){ authFailed(resp.error_description || resp.error); return; }
+      const granted = String(resp.scope||"");
+      const missing = ["calendar","tasks","drive.appdata"].filter(s => !granted.includes("auth/"+s));
+      token = resp.access_token; tokenExp = Date.now() + (Number(resp.expires_in||3600) - 120)*1000;
+      store.set("hibi-token", { t: token, exp: tokenExp });
+      if (missing.length) toast("一部のアクセスが許可されていません。ログインし直して、すべてにチェックを入れてください。");
+      banner($("#authBanner"), "");
+      const q = pendingAuth; pendingAuth = []; q.forEach(f => f());
+      if (!started) start();
+    },
+    error_callback: err => authFailed(err?.type === "popup_closed" ? "ログイン画面が閉じられました。" : err?.type === "popup_failed_to_open" ? "ログイン画面を開けませんでした。もう一度押してください。" : "ログインできませんでした。"),
+  });
+  return true;
+}
+function authFailed(msg){
+  banner($("#loginBanner"), esc(msg));
+  if (started) banner($("#authBanner"), `<span>${esc(msg)}</span><button class="btn sm" type="button" data-reauth>もう一度ログイン</button>`);
+}
+function login(promptConsent){
+  if (!initClient()){ banner($("#loginBanner"), "Googleのログイン部品を読み込めませんでした。通信状況を確認して、ページを開き直してください。"); return; }
+  tokenClient.requestAccessToken({ prompt: promptConsent ? "consent" : "" });
+}
+$("#loginBtn").onclick = () => login(!store.get("hibi-consented", false));
+document.addEventListener("click", e => { if (e.target.closest("[data-reauth]")) login(false); });
+$("#logoutBtn").onclick = () => {
+  try { if (token && gisReady()) google.accounts.oauth2.revoke(token, () => {}); } catch(e){}
+  token = null; store.del("hibi-token"); store.del("hibi-consented"); location.reload();
+};
+function needAuth(){
+  token = null; store.del("hibi-token");
+  banner($("#authBanner"), `<span>ログインの有効期限が切れました。</span><button class="btn sm primary" type="button" data-reauth>続ける</button>`, "info");
+}
+class ApiError extends Error { constructor(code, status, message){ super(message||code); this.code = code; this.status = status; } }
+async function api(url, opts = {}, retry = true){
+  if (!token || Date.now() > tokenExp){ needAuth(); throw new ApiError("auth"); }
+  let r;
+  try { r = await fetch(url, { ...opts, headers: { Authorization: "Bearer " + token, ...(opts.headers||{}) } }); }
+  catch(e){ throw new ApiError("network"); }
+  if (r.status === 401){ needAuth(); throw new ApiError("auth", 401); }
+  if (r.status === 204) return null;
+  if (!r.ok){
+    let msg = ""; try { msg = (await r.json()).error?.message || ""; } catch(e){}
+    if ((r.status === 429 || r.status >= 500) && retry){ await new Promise(res => setTimeout(res, 800 + Math.random()*800)); return api(url, opts, false); }
+    throw new ApiError(r.status === 403 ? "forbidden" : r.status === 404 ? "notfound" : r.status === 412 ? "conflict" : "http", r.status, msg);
+  }
+  const text = await r.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch(e){ return text; }
+}
+function errText(e, verb){
+  if (e?.code === "auth") return "ログインの有効期限が切れました。上の「続ける」を押してください。";
+  if (e?.code === "network") return `通信できませんでした。電波の状況を確認してから、もう一度${verb}してください。`;
+  if (e?.code === "forbidden") return `${verb}する権限がありません。ログアウトしてログインし直し、すべてのアクセスを許可してください。`;
+  if (e?.code === "notfound") return "対象が見つかりませんでした。再読み込みしてください。";
+  return `${verb}できませんでした${e?.status ? `（${e.status}）` : ""}。少し待ってからもう一度お試しください。`;
+}
+
+let started = false;
+function start(){
+  started = true;
+  store.set("hibi-consented", true);
+  $("#loginPanel").hidden = true; $("#appBody").hidden = false; $("#summary").hidden = false;
+  initCalendar(); initTasks(); initJournal();
+}
+function boot(){
+  if (token){ start(); if (!gisReady()) window.addEventListener("load", initClient); else initClient(); return; }
+  const wait = setInterval(() => { if (gisReady()){ clearInterval(wait); initClient(); } }, 200);
+  setTimeout(() => clearInterval(wait), 15000);
+}
+
+// ================= CALENDAR =================
+const REMIND = [["default","カレンダーの既定"],["none","なし"],["5","5分前"],["10","10分前"],["30","30分前"],["60","1時間前"],["1440","1日前"]];
+let calendars = [], palette = {}, evByCal = {}, calErr = null, rangeKey = "", loadSeq = 0;
+let view = store.get("hibi-view", "month"), anchor = sod(new Date()), scrollReset = true;
+if (!["day","week","month","year"].includes(view)) view = "month";
+
+function rangeFor(){
+  if (view==="day") return [anchor, addDays(anchor,1)];
+  if (view==="week") return [anchor, addDays(anchor,7)];
+  if (view==="month"){
+    const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1), s = mondayOf(first);
+    const days = new Date(anchor.getFullYear(), anchor.getMonth()+1, 0).getDate();
+    return [s, addDays(s, Math.ceil(((first.getDay()+6)%7 + days)/7)*7)];
+  }
+  return null;
+}
+const HEX = /^#[0-9a-fA-F]{6}$/;
+function eventColor(ev, cal){
+  if (ev.colorId && palette[ev.colorId]?.background) return palette[ev.colorId].background;
+  for (const k of Object.keys(ev)){
+    if (!/colou?r/i.test(k) || k === "colorId") continue;
+    const v = ev[k];
+    if (typeof v === "string" && HEX.test(v)) return v;
+    if (v && typeof v === "object") for (const kk in v){ if (typeof v[kk] === "string" && HEX.test(v[kk])) return v[kk]; }
+  }
+  return cal.bg;
+}
+function norm(ev, cal){
+  let s, e, allDay = false;
+  if (ev.start?.dateTime){ s = new Date(ev.start.dateTime); e = ev.end?.dateTime ? new Date(ev.end.dateTime) : new Date(s.getTime()+3600000); }
+  else if (ev.start?.date){ allDay = true; s = parseYmd(ev.start.date); e = ev.end?.date ? parseYmd(ev.end.date) : addDays(s,1); }
+  else return null;
+  if (e <= s) e = new Date(s.getTime()+30*60000);
+  const color = eventColor(ev, cal);
+  return { id: cal.id+"|"+ev.id, raw: ev, cal, s, e, allDay, hol: cal.holiday, color, on: onColor(color), title: ev.summary || "（タイトルなし）" };
+}
+const allEvents = () => Object.values(evByCal).flat();
+function onDay(day){
+  const a = sod(day), b = addDays(a,1);
+  return allEvents().filter(x => x.s < b && x.e > a).sort((x,y) => (y.hol - x.hol) || (y.allDay - x.allDay) || (x.s - y.s));
+}
+const findEv = id => allEvents().find(e => e.id===id);
+const cvars = x => `--c:${x.color};--on:${x.on}`;
+
+function setTitle(){
+  const y = anchor.getFullYear(), m = anchor.getMonth()+1;
+  let t;
+  if (view==="year") t = `${y}年`;
+  else if (view==="month") t = `${y}年${m}月`;
+  else if (view==="week"){ const e = addDays(anchor,6); t = `${m}月<small>${anchor.getDate()}日〜${e.getMonth()+1!==m?(e.getMonth()+1)+"月":""}${e.getDate()}日</small>`; }
+  else t = `${m}月${anchor.getDate()}日<small>${WD[anchor.getDay()]}曜日</small>`;
+  $("#cTitle").innerHTML = t;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v===view)));
+}
+const chip = x => `<button type="button" class="chip" style="${cvars(x)}" data-ev="${esc(x.id)}">${esc(x.title)}</button>`;
+const lineEv = x => `<button type="button" class="line-ev" style="${cvars(x)}" data-ev="${esc(x.id)}"><span>${esc(x.title)}</span><time>${hm(x.s)}</time></button>`;
+
+function renderMonth(){
+  const [s, e] = rangeFor(), m = anchor.getMonth();
+  const max = $("#calwrap").clientWidth >= 640 ? 4 : 3;
+  let cells = "";
+  for (let d = new Date(s); d < e; d = addDays(d,1)){
+    const evs = onDay(d), holi = evs.some(x => x.hol);
+    const shown = evs.slice(0, max).map(x => x.allDay ? chip(x) : lineEv(x)).join("");
+    const more = evs.length > max ? `<span class="more">+${evs.length-max}</span>` : "";
+    cells += `<div class="mcell${isWE(d)?" we":""}${d.getDay()===6?" sat":""}${d.getDay()===0?" sun":""}${holi?" holi":""}${d.getMonth()!==m?" out":""}${ymd(d)===TODAY?" is-today":""}" data-day="${ymd(d)}" role="button" tabindex="0" aria-label="${mdw(d)}、予定${evs.length}件"><span class="dn">${d.getDate()}</span><div class="evs">${shown}${more}</div></div>`;
+  }
+  $("#calView").innerHTML = `<div class="mhead">${WD_MON.map(w=>`<div>${w}</div>`).join("")}</div><div class="mgrid">${cells}</div>`;
+}
+function layoutDay(items){
+  items.sort((a,b) => a.s0-b.s0 || b.e0-a.e0);
+  let group = [], end = -1;
+  const flush = () => { const cols = []; for (const it of group){ let c = cols.findIndex(ce => ce <= it.s0); if (c<0){ c=cols.length; cols.push(0);} cols[c]=it.e0; it.col=c; } group.forEach(it => it.n = cols.length); group = []; };
+  for (const it of items){ if (it.s0 >= end && group.length) flush(); group.push(it); end = Math.max(end, it.e0); }
+  if (group.length) flush();
+  return items;
+}
+function timedItems(d){
+  const a = sod(d);
+  return layoutDay(onDay(d).filter(x => !x.allDay).map(x => ({ x, s0: Math.max(0,(x.s-a)/60000), e0: Math.min(1440,(x.e-a)/60000) })));
+}
+function timeGrid(days){
+  const H = 44, one = days.length === 1;
+  const head = one ? "" : `<div class="tg-head"><div></div>${days.map(d => `<div class="${ymd(d)===TODAY?"is-today":""}" data-goday="${ymd(d)}"><small>${WD[d.getDay()]}</small><b>${d.getDate()}</b></div>`).join("")}</div>`;
+  const alls = days.map(d => onDay(d).filter(x => x.allDay));
+  const hasAll = alls.some(a => a.length);
+  const allday = alls.map(a => `<div>${a.slice(0,2).map(chip).join("")}${a.length>2?`<span class="more">+${a.length-2}</span>`:""}</div>`).join("");
+  let hours = "", lines = "";
+  for (let h=1; h<24; h++){ hours += `<span style="top:${h*H}px">${h}:00</span>`; lines += `<div class="hl" style="top:${h*H}px"></div>`; }
+  const nowD = new Date(), nowY = (nowD.getHours()*60+nowD.getMinutes())/60*H;
+  const cols = days.map(d => {
+    const blocks = timedItems(d).map(it => {
+      const top = it.s0/60*H, h = Math.max(16, (it.e0-it.s0)/60*H - 2), w = 100/it.n, l = it.col*w;
+      return `<button type="button" class="blk" style="${cvars(it.x)};top:${top}px;height:${h}px;left:calc(${l}% + 1px);width:calc(${w}% - 2px)" data-ev="${esc(it.x.id)}"><b>${esc(it.x.title)}</b>${h>38?`<small>${hm(it.x.s)}–${hm(it.x.e)}</small>`:""}${one&&h>58&&it.x.raw.location?`<small>${esc(it.x.raw.location)}</small>`:""}</button>`;
+    }).join("");
+    return `<div class="col${isWE(d)?" we":""}">${lines}${blocks}${ymd(d)===TODAY?`<div class="nowline" style="top:${nowY}px"></div>`:""}</div>`;
+  }).join("");
+  const nowTag = days.some(d => ymd(d)===TODAY) ? `<span class="nowtag" style="top:${nowY}px">${hm(nowD)}</span>` : "";
+  return `<div class="tg${one?" one":""}" style="--n:${days.length}">${head}${hasAll?`<div class="tg-allday"><div>終日</div>${allday}</div>`:""}<div class="tg-body" id="tgBody"><div class="tg-body-inner"><div class="hours">${hours}${nowTag}</div>${cols}</div></div></div>`;
+}
+function renderDay(){
+  const mon = mondayOf(anchor);
+  const strip = Array.from({length:7}, (_,i) => addDays(mon,i)).map(d => `<button type="button" class="${ymd(d)===ymd(anchor)?"sel":""}${ymd(d)===TODAY?" is-today":""}" data-goday="${ymd(d)}"><small>${WD[d.getDay()]}</small><b>${d.getDate()}</b></button>`).join("");
+  $("#calView").innerHTML = `<div class="strip">${strip}</div><div style="margin-top:8px">${timeGrid([anchor])}</div>`;
+}
+function renderWeek(){ $("#calView").innerHTML = timeGrid(Array.from({length:7}, (_,i) => addDays(anchor,i))); }
+function renderYear(){
+  const y = anchor.getFullYear(), cm = now0.getFullYear()===y ? now0.getMonth() : -1;
+  let html = "";
+  for (let m=0; m<12; m++){
+    const first = new Date(y,m,1), off = (first.getDay()+6)%7, n = new Date(y,m+1,0).getDate();
+    let cells = WD_MON.map(w => `<span class="wd">${w}</span>`).join("") + "<span></span>".repeat(off);
+    for (let d=1; d<=n; d++){ const k = `${y}-${pad(m+1)}-${pad(d)}`; cells += `<button type="button" data-goday="${k}" class="${k===TODAY?"is-today":""}">${d}</button>`; }
+    html += `<div class="ymon${m===cm?" cur":""}"><h4 data-gomonth="${m}">${m+1}月</h4><div class="ydays">${cells}</div></div>`;
+  }
+  $("#calView").innerHTML = `<div class="ygrid">${html}</div>`;
+}
+function render(){
+  const body = $("#tgBody"); const keep = body && !scrollReset ? body.scrollTop : null;
+  setTitle();
+  ({month:renderMonth, week:renderWeek, day:renderDay, year:renderYear})[view]();
+  const nb = $("#tgBody");
+  if (nb){
+    if (keep != null) nb.scrollTop = keep;
+    else { const t = new Date(); const inc = view==="day" ? ymd(anchor)===TODAY : (anchor <= sod(t) && sod(t) < addDays(anchor,7)); nb.scrollTop = Math.max(0, (inc ? t.getHours()-2 : 8)*44); }
+  }
+  scrollReset = false;
+  const r = rangeFor(), t0 = sod(new Date());
+  if (r && r[0] <= t0 && t0 < r[1] && !calErr) $("#sumEv").textContent = String(onDay(t0).filter(x => !x.hol).length);
+}
+let lastW = 0;
+new ResizeObserver(() => { const w = $("#calwrap").clientWidth; if (Math.abs(w-lastW) > 40 && view==="month" && started){ lastW = w; render(); } else lastW = w; }).observe($("#calwrap"));
+
+function go(v, d){
+  if (v) view = v;
+  if (d) anchor = sod(d);
+  scrollReset = true; store.set("hibi-view", view);
+  render(); fetchRange();
+}
+function step(k){
+  let d = new Date(anchor);
+  if (view==="day") d = addDays(d,k);
+  else if (view==="week") d = addDays(d,7*k);
+  else if (view==="month") d = new Date(d.getFullYear(), d.getMonth()+k, 1);
+  else d = new Date(d.getFullYear()+k, d.getMonth(), 1);
+  go(null, d);
+}
+$("#cPrev").onclick = () => step(-1);
+$("#cNext").onclick = () => step(1);
+$("#cToday").onclick = () => go(null, new Date());
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  const t = sod(new Date());
+  const keepToday = (b.dataset.v==="month" && t.getFullYear()===anchor.getFullYear() && t.getMonth()===anchor.getMonth()) || (b.dataset.v==="year" && t.getFullYear()===anchor.getFullYear());
+  go(b.dataset.v, keepToday ? t : anchor);
+});
+$("#calView").addEventListener("click", e => {
+  const ev = e.target.closest("[data-ev]"); if (ev){ openEvent(ev.dataset.ev); return; }
+  const gd = e.target.closest("[data-goday]"); if (gd){ go("day", parseYmd(gd.dataset.goday)); return; }
+  const gm = e.target.closest("[data-gomonth]"); if (gm){ go("month", new Date(anchor.getFullYear(), Number(gm.dataset.gomonth), 1)); return; }
+  const cell = e.target.closest("[data-day]"); if (cell) go("day", parseYmd(cell.dataset.day));
+});
+$("#calView").addEventListener("keydown", e => { if ((e.key==="Enter"||e.key===" ") && e.target.matches("[data-day]")){ e.preventDefault(); go("day", parseYmd(e.target.dataset.day)); } });
+setInterval(() => { if ((view==="day" || view==="week") && $("#scrim").hidden && started) render(); }, 60000);
+
+async function loadCalMeta(){
+  const [cl, co] = await Promise.all([
+    api(`${CALAPI}/users/me/calendarList?maxResults=250`),
+    api(`${CALAPI}/colors`).catch(() => null),
+  ]);
+  palette = co?.event || {};
+  calendars = (cl?.items || []).filter(c => !c.hidden && c.selected !== false).map(c => ({
+    id: c.id, name: c.summaryOverride || c.summary || "カレンダー", bg: c.backgroundColor || "#039BE5",
+    primary: !!c.primary, writable: ["owner","writer"].includes(c.accessRole), holiday: /#holiday@/.test(c.id),
+  })).sort((a,b) => (b.primary - a.primary));
+}
+async function listEvents(cal, [s, e]){
+  let items = [], pageToken;
+  do {
+    const q = new URLSearchParams({ timeMin: s.toISOString(), timeMax: e.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "2500" });
+    if (pageToken) q.set("pageToken", pageToken);
+    const j = await api(`${CALAPI}/calendars/${encodeURIComponent(cal.id)}/events?${q}`);
+    items = items.concat(j?.items || []); pageToken = j?.nextPageToken;
+  } while (pageToken);
+  return items.filter(x => x.status !== "cancelled").map(x => norm(x, cal)).filter(Boolean);
+}
+async function fetchRange(force){
+  if (!started || !calendars.length) return;
+  const r = rangeFor(); if (!r) return;
+  const key = ymd(r[0])+"_"+ymd(r[1]);
+  if (key === rangeKey && !force) return;
+  if (key !== rangeKey){ evByCal = {}; render(); }
+  rangeKey = key;
+  const seq = ++loadSeq;
+  $("#calUpdated").textContent = "読み込み中…";
+  const res = await Promise.allSettled(calendars.map(c => listEvents(c, r)));
+  if (seq !== loadSeq) return;
+  const next = {}; let err = null;
+  res.forEach((p,i) => { if (p.status === "fulfilled") next[calendars[i].id] = p.value; else { err = p.reason; if (evByCal[calendars[i].id]) next[calendars[i].id] = evByCal[calendars[i].id]; } });
+  evByCal = next; calErr = err;
+  banner($("#calBanner"), err && err.code !== "auth" ? esc(errText(err, "予定を読み込み")) : "");
+  $("#calUpdated").textContent = err ? "" : "更新 " + hm(new Date());
+  render();
+}
+async function initCalendar(){
+  render();
+  try { await loadCalMeta(); rangeKey = ""; await fetchRange(true); }
+  catch(e){ if (e.code === "auth") pendingAuth.push(initCalendar); else banner($("#calBanner"), esc(errText(e, "カレンダーを読み込み"))); }
+}
+$("#calReload").onclick = () => { if (!calendars.length) initCalendar(); else fetchRange(true); };
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !started || !token) return;
+  if (calendars.length) fetchRange(true);
+  loadTasks(); if (!dirty && !writing) loadJournal(true);
+});
+setInterval(() => { if (document.visibilityState === "visible" && started && token && calendars.length) fetchRange(true); }, 5*60000);
+const writableCals = () => calendars.filter(c => c.writable && !c.holiday);
+const defaultCal = () => writableCals()[0] || calendars[0];
+
+// ================= EVENT SHEET =================
+let sheetEv = null, lastFocus = null;
+const sheet = $("#sheet"), scrim = $("#scrim");
+function openSheet(){ lastFocus = document.activeElement; scrim.hidden = false; document.body.classList.add("lock"); sheet.scrollTop = 0; setTimeout(() => sheet.querySelector("button, input")?.focus({preventScroll:true}), 30); }
+function closeSheet(){ scrim.hidden = true; document.body.classList.remove("lock"); sheetEv = null; lastFocus?.focus?.({preventScroll:true}); }
+scrim.addEventListener("click", e => { if (e.target === scrim) closeSheet(); });
+document.addEventListener("keydown", e => { if (e.key==="Escape" && !scrim.hidden) closeSheet(); });
+function whenText(x){
+  const endShown = x.allDay ? addDays(x.e,-1) : x.e;
+  if (x.allDay) return ymd(x.s)===ymd(endShown) ? [ymdw(x.s), "終日"] : [`${mdw(x.s)} 〜 ${mdw(endShown)}`, "終日"];
+  if (ymd(x.s)===ymd(x.e)) return [ymdw(x.s), `${hm2(x.s)}〜${hm2(x.e)}`];
+  return [`${mdw(x.s)} ${hm2(x.s)}`, `〜 ${mdw(x.e)} ${hm2(x.e)}`];
+}
+function miniTimeline(x){
+  if (x.allDay) return "";
+  const a = sod(x.s), PX = 38;
+  const sm = (x.s-a)/60000, em = Math.min(1440, (x.e-a)/60000);
+  let h0 = Math.max(0, Math.floor(sm/60) - (sm%60 < 20 ? 1 : 0)), h1 = Math.min(24, Math.max(h0+2, Math.ceil(em/60)));
+  if (h1 - h0 > 4) h1 = h0 + 4;
+  const H = (h1-h0)*PX;
+  let labs = "", lines = "";
+  for (let h=h0+1; h<h1; h++){ const y = (h-h0)*PX; labs += `<span class="lab" style="top:${y}px">${h}:00</span>`; lines += `<div class="hl" style="top:${y}px"></div>`; }
+  const blocks = timedItems(x.s).filter(it => it.e0 > h0*60 && it.s0 < h1*60).map(it => {
+    const top = Math.max(0, (it.s0-h0*60)/60*PX), bot = Math.min(H, (it.e0-h0*60)/60*PX), w = 100/it.n, l = it.col*w;
+    return `<div class="blk${it.x.id===x.id?" me":""}" style="${cvars(it.x)};top:${top+1}px;height:${Math.max(14,bot-top-2)}px;left:calc(${l}% + 1px);width:calc(${w}% - 2px)"><b>${esc(it.x.title)}</b>${bot-top>34?`<small>${hm(it.x.s)}–${hm(it.x.e)}</small>`:""}</div>`;
+  }).join("");
+  return `<div class="mini" style="height:${H}px" aria-hidden="true">${lines}${labs}<div class="area">${blocks}</div></div>`;
+}
+function colorDiag(raw){
+  const out = { colorId: raw.colorId ?? "（なし）" };
+  for (const k of Object.keys(raw)) if (/colou?r/i.test(k) && k !== "colorId") out[k] = raw[k];
+  return JSON.stringify(out, null, 1);
+}
+function openEvent(id){ const x = findEv(id); if (!x) return; sheetEv = x; renderView(); openSheet(); }
+function renderView(confirmDel){
+  const x = sheetEv; if (!x) return;
+  const [d1, d2] = whenText(x), desc = htmlToText(x.raw.description), ro = x.hol || !x.cal.writable;
+  const link = x.raw.htmlLink && /^https:\/\//.test(x.raw.htmlLink) ? `<div class="row"><a href="${esc(x.raw.htmlLink)}" target="_blank" rel="noopener">Googleカレンダーで開く</a></div>` : "";
+  sheet.setAttribute("aria-label", x.title);
+  sheet.innerHTML = `
+    <div class="sh-top"><h3>${esc(x.title)}</h3>${ro?"":`<button type="button" class="pillbtn" id="shEdit">編集</button>`}<button type="button" class="round" id="shClose" aria-label="閉じる">×</button></div>
+    <div class="when"><span>${esc(d1)}</span><b>${esc(d2)}</b></div>
+    ${miniTimeline(x)}
+    <div class="grp">
+      <div class="row" style="--c:${x.color}"><span>カレンダー</span><span class="val"><i class="dot"></i>${esc(x.cal.name)}</span></div>
+      ${x.raw.location?`<div class="row"><span>場所</span><span class="val">${esc(x.raw.location)}</span></div>`:""}
+      ${x.raw.recurringEventId?`<div class="row"><span>繰り返し</span><span class="val">繰り返す予定</span></div>`:""}
+      ${link}
+    </div>
+    ${desc?`<div class="grp"><div class="row block"><small>メモ</small><p>${esc(desc)}</p></div></div>`:""}
+    ${ro ? `<p class="note" style="text-align:center">このカレンダーの予定は編集できません</p>` : confirmDel ? `
+      <div class="confirm"><span>「${esc(x.title)}」を削除しますか？ Googleカレンダーからも消え、元に戻せません。${x.raw.recurringEventId?"（この回だけが削除されます）":""}</span>
+      <div><button type="button" class="btn" id="delNo">やめる</button><button type="button" class="btn del" id="delYes">削除する</button></div><p class="sh-msg" id="shMsg"></p></div>` :
+      `<button type="button" class="danger" id="shDel">予定を削除</button>`}
+    <details class="diag"><summary>色の情報（確認用）</summary><pre>${esc(colorDiag(x.raw))}</pre></details>`;
+  $("#shClose").onclick = closeSheet;
+  $("#shEdit") && ($("#shEdit").onclick = () => renderEdit(x));
+  $("#shDel") && ($("#shDel").onclick = () => renderView(true));
+  $("#delNo") && ($("#delNo").onclick = () => renderView(false));
+  $("#delYes") && ($("#delYes").onclick = () => doDelete(x));
+}
+async function doDelete(x){
+  const b = $("#delYes"); b.disabled = true; b.textContent = "削除中…";
+  try {
+    await api(`${CALAPI}/calendars/${encodeURIComponent(x.cal.id)}/events/${encodeURIComponent(x.raw.id)}`, { method: "DELETE" });
+    closeSheet(); toast("予定を削除しました"); fetchRange(true);
+  } catch(err){
+    b.disabled = false; b.textContent = "削除する";
+    $("#shMsg").textContent = err.status === 410 ? "すでに削除されています。" : errText(err, "削除");
+    if (err.status === 410){ closeSheet(); fetchRange(true); }
+  }
+}
+function reminderOf(raw){
+  const r = raw.reminders; if (!r || r.useDefault !== false) return "default";
+  const ov = r.overrides || [];
+  if (!ov.length) return "none";
+  const m = String(ov[0].minutes); return REMIND.some(x => x[0]===m) ? m : "default";
+}
+function renderEdit(x){
+  const isNew = !x;
+  let base;
+  if (isNew){
+    const d = view==="day" ? anchor : sod(new Date());
+    const st = new Date(d); const nh = new Date(); st.setHours(ymd(d)===TODAY ? Math.min(23, nh.getHours()+1) : 10, 0, 0, 0);
+    base = { title:"", loc:"", allDay:false, s:st, e:new Date(st.getTime()+3600000), colorId:"", memo:"", rem:"default", cal: defaultCal()?.id };
+  } else {
+    base = { title:x.raw.summary||"", loc:x.raw.location||"", allDay:x.allDay, s:x.s, e:x.allDay ? addDays(x.e,-1) : x.e, colorId:x.raw.colorId||"", memo:htmlToText(x.raw.description), rem:reminderOf(x.raw), cal: x.cal.id };
+  }
+  let colorId = base.colorId;
+  const ids = Object.keys(palette).sort((a,b) => Number(a)-Number(b));
+  const cals = writableCals();
+  sheet.setAttribute("aria-label", isNew ? "新規予定" : "予定を編集");
+  sheet.innerHTML = `
+    <div class="sh-bar"><button type="button" class="round" id="edCancel" aria-label="キャンセル">×</button><h3>${isNew?"新規予定":"予定を編集"}</h3><button type="button" class="round ok" id="edSave" aria-label="保存">✓</button></div>
+    <div class="grp"><input type="text" id="edTitle" placeholder="タイトル" value="${esc(base.title)}" aria-label="タイトル"><input type="text" id="edLoc" placeholder="場所" value="${esc(base.loc)}" aria-label="場所"></div>
+    <div class="grp">
+      <div class="row"><span>終日</span><label class="switch"><input type="checkbox" id="edAll" ${base.allDay?"checked":""} aria-label="終日"><i></i></label></div>
+      <div class="row"><span>開始</span><span class="dt"><input type="date" id="edSD" value="${ymd(base.s)}" aria-label="開始日"><input type="time" id="edST" value="${hm2(base.s)}" aria-label="開始時刻"></span></div>
+      <div class="row"><span>終了</span><span class="dt"><input type="date" id="edED" value="${ymd(base.e)}" aria-label="終了日"><input type="time" id="edET" value="${hm2(base.e)}" aria-label="終了時刻"></span></div>
+    </div>
+    <div class="grp">
+      ${isNew && cals.length > 1 ? `<div class="row"><span>カレンダー</span><select id="edCal" aria-label="カレンダー">${cals.map(c => `<option value="${esc(c.id)}" ${c.id===base.cal?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>` : ""}
+      <div class="row block"><span>色</span><span class="sw" id="edSw"><button type="button" class="def" data-c="" aria-label="カレンダーの色">標準</button>${ids.map(k => `<button type="button" data-c="${k}" style="--c:${palette[k].background}" aria-label="色 ${k}"></button>`).join("")}</span></div>
+      <div class="row"><span>通知</span><select id="edRem" aria-label="通知">${REMIND.map(([v,l]) => `<option value="${v}" ${v===base.rem?"selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="grp"><textarea id="edMemo" placeholder="メモ" aria-label="メモ">${esc(base.memo)}</textarea></div>
+    ${!isNew && x.raw.recurringEventId ? `<p class="note">繰り返す予定のうち、この回だけが変更されます。</p>` : ""}
+    <p class="sh-msg" id="shMsg"></p>`;
+  const setTimesVis = () => { const a = $("#edAll").checked; $("#edST").hidden = $("#edET").hidden = a; };
+  setTimesVis();
+  const paintSw = () => $("#edSw").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.c===colorId)));
+  paintSw();
+  $("#edSw").onclick = e => { const b = e.target.closest("button"); if (!b) return; colorId = b.dataset.c; paintSw(); };
+  $("#edAll").onchange = setTimesVis;
+  $("#edSD").onchange = () => { if ($("#edED").value < $("#edSD").value) $("#edED").value = $("#edSD").value; };
+  $("#edCancel").onclick = () => isNew ? closeSheet() : renderView();
+  $("#edSave").onclick = async () => {
+    const title = $("#edTitle").value.trim();
+    if (!title){ $("#shMsg").textContent = "タイトルを入力してください。"; $("#edTitle").focus(); return; }
+    const allDay = $("#edAll").checked, sd = $("#edSD").value, ed = $("#edED").value || sd;
+    if (!sd){ $("#shMsg").textContent = "開始日を入力してください。"; return; }
+    const body = { summary: title };
+    if (allDay){
+      if (ed < sd){ $("#shMsg").textContent = "終了日は開始日以降にしてください。"; return; }
+      body.start = { date: sd }; body.end = { date: ymd(addDays(parseYmd(ed),1)) };
+    } else {
+      const st = $("#edST").value || "10:00", et = $("#edET").value || st;
+      if (`${ed}T${et}` <= `${sd}T${st}`){ $("#shMsg").textContent = "終了は開始より後の時刻にしてください。"; return; }
+      body.start = { dateTime: `${sd}T${st}:00`, timeZone: TZ }; body.end = { dateTime: `${ed}T${et}:00`, timeZone: TZ };
+    }
+    const loc = $("#edLoc").value.trim(), memo = $("#edMemo").value;
+    if (isNew || loc !== base.loc) body.location = loc;
+    if (isNew || memo !== base.memo) body.description = memo;
+    if (isNew ? colorId : colorId !== base.colorId) body.colorId = colorId || null;
+    const rem = $("#edRem").value;
+    if (isNew || rem !== base.rem){
+      body.reminders = rem === "default" ? { useDefault: true } : rem === "none" ? { useDefault: false, overrides: [] } : { useDefault: false, overrides: [{ method: "popup", minutes: Number(rem) }] };
+    }
+    const calId = isNew ? ($("#edCal")?.value || base.cal) : x.cal.id;
+    if (!calId){ $("#shMsg").textContent = "書き込めるカレンダーが見つかりません。"; return; }
+    const b = $("#edSave"); b.disabled = true; $("#shMsg").textContent = "保存しています…";
+    try {
+      const url = `${CALAPI}/calendars/${encodeURIComponent(calId)}/events` + (isNew ? "" : `/${encodeURIComponent(x.raw.id)}`);
+      await api(url, { method: isNew ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      closeSheet(); toast(isNew ? "予定を追加しました" : "予定を更新しました"); fetchRange(true);
+    } catch(err){ b.disabled = false; $("#shMsg").textContent = errText(err, "保存"); }
+  };
+}
+$("#cAdd").onclick = () => {
+  if (!writableCals().length){ toast("書き込めるカレンダーを読み込めていません。再読み込みしてください。"); return; }
+  sheetEv = null; renderEdit(null); openSheet();
+};
+
+// ================= TASKS (Google Tasks) =================
+let taskLists = [], curList = store.get("hibi-tasklist", null), gtasks = [], tBusy = new Set();
+function dueChip(due){
+  if (!due) return "";
+  const d = parseYmd(due), tmr = ymd(addDays(new Date(),1));
+  if (due < TODAY) return `<span class="due over">${d.getMonth()+1}/${d.getDate()} 期限切れ</span>`;
+  if (due === TODAY) return `<span class="due today">今日まで</span>`;
+  if (due === tmr) return `<span class="due">明日まで</span>`;
+  return `<span class="due">${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>`;
+}
+const tDue = t => t.due ? t.due.slice(0,10) : "";
+function taskLi(t){
+  const done = t.status === "completed";
+  return `<li class="task${done?" done":""}${t.parent?" sub":""}" data-id="${esc(t.id)}"><button class="box" type="button" aria-label="${done?"未完了に戻す":"完了にする"}"></button>
+    <span class="tt">${esc(t.title || "（タイトルなし）")}${t.notes?`<small>${esc(t.notes)}</small>`:""}</span>${done?"":dueChip(tDue(t))}<button class="del" type="button" data-del="${esc(t.id)}" aria-label="削除">削除</button></li>`;
+}
+function renderTasks(){
+  const open = gtasks.filter(t => t.status !== "completed");
+  const tops = open.filter(t => !t.parent).sort((a,b) => (tDue(a)||"9999").localeCompare(tDue(b)||"9999") || String(a.position).localeCompare(String(b.position)));
+  const ordered = []; tops.forEach(t => { ordered.push(t); open.filter(c => c.parent === t.id).sort((a,b) => String(a.position).localeCompare(String(b.position))).forEach(c => ordered.push(c)); });
+  open.filter(t => t.parent && !tops.some(p => p.id === t.parent)).forEach(t => ordered.push(t));
+  const done = gtasks.filter(t => t.status === "completed").sort((a,b) => String(b.completed||"").localeCompare(String(a.completed||"")));
+  $("#sumTask").textContent = String(open.length);
+  $("#openTasks").innerHTML = ordered.length ? ordered.map(taskLi).join("") : `<li class="empty">未完了のタスクはありません。上の欄から追加できます。</li>`;
+  $("#doneBox").hidden = !done.length;
+  $("#doneSummary").textContent = `完了済み（${done.length}）`;
+  $("#doneTasks").innerHTML = done.slice(0, 50).map(taskLi).join("");
+}
+async function loadTasks(){
+  if (!curList || !started) return;
+  try {
+    let items = [], pt;
+    do {
+      const q = new URLSearchParams({ showCompleted: "true", showHidden: "true", maxResults: "100" }); if (pt) q.set("pageToken", pt);
+      const j = await api(`${TASKAPI}/lists/${encodeURIComponent(curList)}/tasks?${q}`);
+      items = items.concat(j?.items || []); pt = j?.nextPageToken;
+    } while (pt);
+    gtasks = items.filter(t => !t.deleted && (t.title || t.notes)); banner($("#taskBanner"), ""); renderTasks();
+  } catch(e){ if (e.code !== "auth") banner($("#taskBanner"), esc(errText(e, "タスクを読み込み"))); }
+}
+async function initTasks(){
+  try {
+    const j = await api(`${TASKAPI}/users/@me/lists?maxResults=100`);
+    taskLists = j?.items || [];
+    if (!taskLists.some(l => l.id === curList)) curList = taskLists[0]?.id || null;
+    $("#taskList").innerHTML = taskLists.map(l => `<option value="${esc(l.id)}" ${l.id===curList?"selected":""}>${esc(l.title)}</option>`).join("");
+    $("#taskList").hidden = taskLists.length < 2;
+    await loadTasks();
+  } catch(e){ if (e.code === "auth") pendingAuth.push(initTasks); else banner($("#taskBanner"), esc(errText(e, "タスクを読み込み"))); }
+}
+$("#taskList").onchange = e => { curList = e.target.value; store.set("hibi-tasklist", curList); gtasks = []; renderTasks(); loadTasks(); };
+const tUrl = id => `${TASKAPI}/lists/${encodeURIComponent(curList)}/tasks/${encodeURIComponent(id)}`;
+async function toggleTask(id){
+  const t = gtasks.find(x => x.id === id); if (!t || tBusy.has(id)) return;
+  tBusy.add(id);
+  const wasDone = t.status === "completed", prev = { ...t };
+  Object.assign(t, wasDone ? { status: "needsAction", completed: null } : { status: "completed", completed: new Date().toISOString() }); renderTasks();
+  try { const r = await api(tUrl(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(wasDone ? { status: "needsAction", completed: null } : { status: "completed" }) }); if (r) Object.assign(t, r); }
+  catch(e){ Object.assign(t, prev); toast(errText(e, "更新")); }
+  finally { tBusy.delete(id); renderTasks(); }
+}
+async function deleteTask(id){
+  if (tBusy.has(id)) return; tBusy.add(id);
+  try { await api(tUrl(id), { method: "DELETE" }); gtasks = gtasks.filter(t => t.id !== id); renderTasks(); toast("タスクを削除しました"); }
+  catch(e){ toast(errText(e, "削除")); }
+  finally { tBusy.delete(id); }
+}
+["#openTasks","#doneTasks"].forEach(sel => $(sel).addEventListener("click", e => {
+  const del = e.target.closest("[data-del]"); if (del){ deleteTask(del.dataset.del); return; }
+  const box = e.target.closest(".box"); if (box) toggleTask(box.closest(".task").dataset.id);
+}));
+$("#taskForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!curList){ toast("タスクのリストを読み込めていません。"); return; }
+  const title = $("#taskTitle").value.trim(); if (!title) return;
+  const due = $("#taskDue").value;
+  $("#taskAddBtn").disabled = true;
+  try {
+    const t = await api(`${TASKAPI}/lists/${encodeURIComponent(curList)}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(due ? { title, due: `${due}T00:00:00.000Z` } : { title }) });
+    if (t) gtasks.unshift(t); renderTasks(); $("#taskTitle").value = ""; $("#taskDue").value = "";
+  } catch(err){ toast(errText(err, "追加")); }
+  finally { $("#taskAddBtn").disabled = false; }
+});
+
+// ================= JOURNAL (Google Drive appData) =================
+const MOODS = [[5,"とても良い","var(--leaf)"],[4,"良い","color-mix(in srgb,var(--leaf) 55%,var(--accent))"],[3,"ふつう","var(--accent)"],[2,"いまいち","color-mix(in srgb,var(--accent) 50%,var(--warn))"],[1,"しんどい","var(--warn)"]];
+const JFILE = "journal.json";
+let entries = store.get("hibi-journal-cache", {}) || {}, jFileId = null, jDate = TODAY, jMood = null, dirty = false, saveT = null, writing = false, rev = 0, jReady = false;
+$("#jDate").value = TODAY;
+$("#moods").innerHTML = MOODS.map(([v,l,c]) => `<button class="mood" type="button" data-m="${v}" aria-pressed="false"><i style="background:${c}"></i>${l}</button>`).join("");
+const liveEntry = d => { const e = entries[d]; return e && !e.deleted ? e : null; };
+function setMoodUI(){ document.querySelectorAll(".mood").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.m)===jMood))); }
+function countChars(){ $("#jCount").textContent = $("#jText").value.replace(/\s/g,"").length + "字"; }
+function loadEntry(date){
+  const e = liveEntry(date);
+  $("#jText").value = e?.text || ""; jMood = e?.mood ?? null; dirty = false;
+  setMoodUI(); countChars(); $("#jStatus").textContent = e?.updatedAt ? "保存済み " + hm(new Date(e.updatedAt)) : "";
+  renderPast();
+}
+function mergeEntries(a, b){
+  const out = { ...a };
+  for (const k in b){ if (!out[k] || String(b[k].updatedAt||"") > String(out[k].updatedAt||"")) out[k] = b[k]; }
+  return out;
+}
+async function findJournalFile(){
+  const q = new URLSearchParams({ spaces: "appDataFolder", q: `name='${JFILE}' and trashed=false`, fields: "files(id,modifiedTime)", pageSize: "10" });
+  const j = await api(`${DRIVE}/files?${q}`);
+  return j?.files?.[0]?.id || null;
+}
+async function readRemote(){
+  if (!jFileId) jFileId = await findJournalFile();
+  if (!jFileId) return {};
+  const data = await api(`${DRIVE}/files/${encodeURIComponent(jFileId)}?alt=media`);
+  return (data && typeof data === "object" && data.entries) ? data.entries : {};
+}
+async function writeRemote(all){
+  const body = JSON.stringify({ app: "hibi-techo", version: 1, entries: all });
+  if (!jFileId){
+    const boundary = "hibi" + Math.random().toString(36).slice(2);
+    const meta = { name: JFILE, parents: ["appDataFolder"], mimeType: "application/json" };
+    const multipart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${body}\r\n--${boundary}--`;
+    const r = await api(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart });
+    jFileId = r?.id || null;
+  } else {
+    await api(`${UPLOAD}/files/${encodeURIComponent(jFileId)}?uploadType=media`, { method: "PATCH", headers: { "Content-Type": "application/json; charset=UTF-8" }, body });
+  }
+}
+async function loadJournal(quiet){
+  if (!started) return;
+  try {
+    const remote = await readRemote();
+    entries = mergeEntries(entries, remote); store.set("hibi-journal-cache", entries); jReady = true;
+    banner($("#jBanner"), "");
+    if (!dirty && !writing) loadEntry(jDate); else renderPast();
+  } catch(e){
+    if (e.code === "auth"){ pendingAuth.push(() => loadJournal(quiet)); return; }
+    if (!quiet) banner($("#jBanner"), esc(errText(e, "日記を読み込み")));
+  }
+}
+function initJournal(){ loadEntry(jDate); loadJournal(); }
+async function save(){
+  clearTimeout(saveT);
+  if (!dirty) return;
+  if (writing){ saveT = setTimeout(save, 500); return; }
+  const date = jDate, text = $("#jText").value, mood = jMood, myRev = ++rev;
+  entries[date] = (!text.trim() && mood == null) ? { deleted: true, updatedAt: new Date().toISOString() } : { text, mood, updatedAt: new Date().toISOString() };
+  store.set("hibi-journal-cache", entries);
+  writing = true; $("#jStatus").textContent = "保存中…";
+  try {
+    const remote = await readRemote().catch(e => { if (e.code === "notfound"){ jFileId = null; return {}; } throw e; });
+    entries = mergeEntries(remote, entries);
+    await writeRemote(entries); store.set("hibi-journal-cache", entries);
+    if (myRev === rev && date === jDate){ dirty = false; $("#jStatus").textContent = "保存しました"; }
+    renderPast();
+  } catch(err){
+    $("#jStatus").textContent = err.code === "auth" ? "未保存：ログインし直すと保存されます" : "保存できませんでした（この端末には残っています）";
+    if (err.code === "auth") pendingAuth.push(() => { dirty = true; save(); });
+  } finally { writing = false; }
+}
+function scheduleSave(ms){ dirty = true; $("#jStatus").textContent = "入力中…"; clearTimeout(saveT); saveT = setTimeout(save, ms); }
+$("#jText").addEventListener("input", () => { countChars(); scheduleSave(1500); });
+$("#jText").addEventListener("blur", () => { if (dirty) save(); });
+window.addEventListener("pagehide", () => { if (dirty) save(); });
+$("#moods").addEventListener("click", e => { const b = e.target.closest(".mood"); if (!b) return; const v = Number(b.dataset.m); jMood = jMood===v ? null : v; setMoodUI(); scheduleSave(400); });
+$("#prompts").addEventListener("click", e => {
+  const b = e.target.closest("[data-p]"); if (!b) return;
+  const ta = $("#jText"); const pre = ta.value && !ta.value.endsWith("\n") ? "\n\n" : "";
+  ta.value += `${pre}【${b.dataset.p}】\n`; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); countChars(); scheduleSave(1500);
+});
+async function goDate(date){ if (!date) return; if (dirty) await save(); jDate = date; $("#jDate").value = date; loadEntry(date); }
+$("#jDate").addEventListener("change", e => goDate(e.target.value));
+$("#jPrev").onclick = () => goDate(ymd(addDays(parseYmd(jDate), -1)));
+$("#jNext").onclick = () => goDate(ymd(addDays(parseYmd(jDate), 1)));
+$("#jToday").onclick = () => goDate(TODAY);
+function renderPast(){
+  const list = Object.entries(entries).filter(([,e]) => !e.deleted).map(([d,e]) => ({ date: d, ...e })).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 30);
+  const has = !!liveEntry(TODAY);
+  $("#sumJournal").textContent = has ? "書いた" : "まだ";
+  $("#sumJournalPill").classList.toggle("ok", has);
+  $("#past").innerHTML = list.length ? list.map(e => {
+    const m = MOODS.find(x => x[0]===e.mood);
+    const first = (e.text||"").split("\n").map(s=>s.trim()).find(Boolean) || (m ? "" : "（本文なし）");
+    return `<li><button type="button" data-d="${esc(e.date)}" aria-current="${e.date===jDate}"><span class="pd">${mdw(parseYmd(e.date))}</span><span class="px">${m?esc(m[1])+" · ":""}${esc(first)}</span></button></li>`;
+  }).join("") : `<li class="empty">まだ日記はありません。上の欄に書くと、ここに並びます。</li>`;
+}
+$("#past").addEventListener("click", e => { const b = e.target.closest("[data-d]"); if (b) goDate(b.dataset.d); });
+
+// ================= PWA =================
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+
+boot();
+})();
+</script>
+</body>
+</html>
