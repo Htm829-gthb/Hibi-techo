@@ -556,15 +556,32 @@ function rangeFor(){
   }
   return null;
 }
-const HEX = /^#[0-9a-fA-F]{6}$/;
-function eventColor(ev, cal){
-  if (ev.colorId && palette[ev.colorId]?.background) return palette[ev.colorId].background;
-  for (const k of Object.keys(ev)){
-    if (!/colou?r/i.test(k) || k === "colorId") continue;
-    const v = ev[k];
-    if (typeof v === "string" && HEX.test(v)) return v;
-    if (v && typeof v === "object") for (const kk in v){ if (typeof v[kk] === "string" && HEX.test(v[kk])) return v[kk]; }
+const HEX = /^#?[0-9a-fA-F]{6}$/;
+const toHex = n => pad2(Math.round(Math.max(0, Math.min(255, n))).toString(16));
+const pad2 = s => s.length < 2 ? "0"+s : s;
+function asColor(v){
+  if (typeof v === "string"){ const s = v.trim(); if (HEX.test(s)) return s[0]==="#" ? s : "#"+s; return null; }
+  if (v && typeof v === "object" && ["red","green","blue"].some(k => typeof v[k] === "number")){
+    const r = v.red||0, g = v.green||0, b = v.blue||0, scale = Math.max(r,g,b) <= 1 ? 255 : 1;
+    return "#" + toHex(r*scale) + toHex(g*scale) + toHex(b*scale);
   }
+  return null;
+}
+// 予定の中から「色」に関係する値を探す（Googleの新しい色の形式にも対応できるよう、名前に color を含む項目を深さ3まで調べる）
+function findColorFields(obj, path = "", depth = 0, out = []){
+  if (!obj || typeof obj !== "object" || depth > 3) return out;
+  for (const k of Object.keys(obj)){
+    if (k === "description" || k === "attendees" || k === "conferenceData") continue;
+    const v = obj[k], p = path ? path+"."+k : k;
+    if (/colou?r|rgb/i.test(k) && k !== "colorId"){ const c = asColor(v); out.push({ path: p, value: v, color: c }); if (c) continue; }
+    if (v && typeof v === "object") findColorFields(v, p, depth+1, out);
+  }
+  return out;
+}
+function eventColor(ev, cal){
+  const found = findColorFields(ev).find(f => f.color);
+  if (found) return found.color;
+  if (ev.colorId && palette[ev.colorId]?.background) return palette[ev.colorId].background;
   return cal.bg;
 }
 function norm(ev, cal){
@@ -786,9 +803,15 @@ function miniTimeline(x){
   }).join("");
   return `<div class="mini" style="height:${H}px" aria-hidden="true">${lines}${labs}<div class="area">${blocks}</div></div>`;
 }
-function colorDiag(raw){
-  const out = { colorId: raw.colorId ?? "（なし）" };
-  for (const k of Object.keys(raw)) if (/colou?r/i.test(k) && k !== "colorId") out[k] = raw[k];
+function colorDiag(raw, cal){
+  const out = {
+    colorId: raw.colorId ?? "（なし）",
+    "colorIdの色": raw.colorId ? (palette[raw.colorId]?.background || "（色の一覧にない番号）") : "-",
+    "色の項目": findColorFields(raw).map(f => `${f.path} = ${JSON.stringify(f.value)}`),
+    "カレンダーの色": cal?.bg,
+    "色の一覧の番号": Object.keys(palette).join(","),
+    "予定の項目名": Object.keys(raw).join(", "),
+  };
   return JSON.stringify(out, null, 1);
 }
 function openEvent(id){ const x = findEv(id); if (!x) return; sheetEv = x; renderView(); openSheet(); }
@@ -812,7 +835,7 @@ function renderView(confirmDel){
       <div class="confirm"><span>「${esc(x.title)}」を削除しますか？ Googleカレンダーからも消え、元に戻せません。${x.raw.recurringEventId?"（この回だけが削除されます）":""}</span>
       <div><button type="button" class="btn" id="delNo">やめる</button><button type="button" class="btn del" id="delYes">削除する</button></div><p class="sh-msg" id="shMsg"></p></div>` :
       `<button type="button" class="danger" id="shDel">予定を削除</button>`}
-    <details class="diag"><summary>色の情報（確認用）</summary><pre>${esc(colorDiag(x.raw))}</pre></details>`;
+    <details class="diag"><summary>色の情報（確認用）</summary><pre>${esc(colorDiag(x.raw, x.cal))}</pre></details>`;
   $("#shClose").onclick = closeSheet;
   $("#shEdit") && ($("#shEdit").onclick = () => renderEdit(x));
   $("#shDel") && ($("#shDel").onclick = () => renderView(true));
