@@ -542,7 +542,7 @@ function boot(){
 
 // ================= CALENDAR =================
 const REMIND = [["default","カレンダーの既定"],["none","なし"],["5","5分前"],["10","10分前"],["30","30分前"],["60","1時間前"],["1440","1日前"]];
-let calendars = [], palette = {}, evByCal = {}, calErr = null, rangeKey = "", loadSeq = 0;
+let calendars = [], palette = {}, labels = {}, evByCal = {}, calErr = null, rangeKey = "", loadSeq = 0;
 let view = store.get("hibi-view", "month"), anchor = sod(new Date()), scrollReset = true;
 if (!["day","week","month","year"].includes(view)) view = "month";
 
@@ -587,7 +587,9 @@ function findColorFields(obj, path = "", depth = 0, out = []){
   }
   return out;
 }
+const labelOf = (ev, cal) => ev.eventLabelId ? labels[cal.id]?.[ev.eventLabelId] || null : null;
 function eventColor(ev, cal){
+  const lb = labelOf(ev, cal); if (lb?.color) return lb.color;
   const found = findColorFields(ev).find(f => f.color);
   if (found) return found.color;
   if (ev.colorId && palette[ev.colorId]?.background) return palette[ev.colorId].background;
@@ -740,11 +742,20 @@ async function loadCalMeta(){
     id: c.id, name: c.summaryOverride || c.summary || "カレンダー", bg: c.backgroundColor || "#039BE5",
     primary: !!c.primary, writable: ["owner","writer"].includes(c.accessRole), holiday: /#holiday@/.test(c.id),
   })).sort((a,b) => (b.primary - a.primary));
+  // Googleの新しい色は「ラベル」としてカレンダー側に登録されている（予定には eventLabelId だけが入る）
+  const res = await Promise.allSettled(calendars.filter(c => !c.holiday).map(c => api(`${CALAPI}/calendars/${encodeURIComponent(c.id)}?eventLabelVersion=1`).then(j => [c.id, j])));
+  labels = {};
+  for (const r of res){
+    if (r.status !== "fulfilled") continue;
+    const [id, j] = r.value, map = {};
+    for (const l of (j?.labelProperties?.eventLabels || [])) if (l && l.id) map[l.id] = { color: asColor(l.backgroundColor) || l.backgroundColor, name: l.name || "" };
+    labels[id] = map;
+  }
 }
 async function listEvents(cal, [s, e]){
   let items = [], pageToken;
   do {
-    const q = new URLSearchParams({ timeMin: s.toISOString(), timeMax: e.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "2500" });
+    const q = new URLSearchParams({ timeMin: s.toISOString(), timeMax: e.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "2500", eventLabelVersion: "1" });
     if (pageToken) q.set("pageToken", pageToken);
     const j = await api(`${CALAPI}/calendars/${encodeURIComponent(cal.id)}/events?${q}`);
     items = items.concat(j?.items || []); pageToken = j?.nextPageToken;
@@ -815,6 +826,9 @@ function miniTimeline(x){
 function colorDiag(raw, cal){
   const out = {
     colorId: raw.colorId ?? "（なし）",
+    eventLabelId: raw.eventLabelId || "（なし）",
+    "ラベル": raw.eventLabelId ? (labels[cal?.id]?.[raw.eventLabelId] || "（ラベル一覧に見つからない）") : "-",
+    "ラベルの数": Object.keys(labels[cal?.id] || {}).length,
     "colorIdの色": raw.colorId ? (palette[raw.colorId]?.background || "（色の一覧にない番号）") : "-",
     "色の項目": findColorFields(raw).map(f => `${f.path} = ${JSON.stringify(f.value)}`),
     "カレンダーの色": cal?.bg,
@@ -835,7 +849,7 @@ function renderView(confirmDel){
     ${miniTimeline(x)}
     <div class="grp">
       <div class="row"><span>カレンダー</span><span class="val">${esc(x.cal.name)}</span></div>
-      <div class="row" style="--c:${x.color}"><span>色</span><span class="val"><i class="dot"></i>${esc(colorName(x.color))}</span></div>
+      <div class="row" style="--c:${x.color}"><span>色</span><span class="val"><i class="dot"></i>${esc(labelOf(x.raw, x.cal)?.name || colorName(x.color))}</span></div>
       ${x.raw.location?`<div class="row"><span>場所</span><span class="val">${esc(x.raw.location)}</span></div>`:""}
       ${x.raw.recurringEventId?`<div class="row"><span>繰り返し</span><span class="val">繰り返す予定</span></div>`:""}
       ${link}
@@ -875,12 +889,16 @@ function renderEdit(x){
   if (isNew){
     const d = view==="day" ? anchor : sod(new Date());
     const st = new Date(d); const nh = new Date(); st.setHours(ymd(d)===TODAY ? Math.min(23, nh.getHours()+1) : 10, 0, 0, 0);
-    base = { title:"", loc:"", allDay:false, s:st, e:new Date(st.getTime()+3600000), colorId:"", memo:"", rem:"default", cal: defaultCal()?.id };
+    base = { title:"", loc:"", allDay:false, s:st, e:new Date(st.getTime()+3600000), colorId:"", label:"", memo:"", rem:"default", cal: defaultCal()?.id };
   } else {
-    base = { title:x.raw.summary||"", loc:x.raw.location||"", allDay:x.allDay, s:x.s, e:x.allDay ? addDays(x.e,-1) : x.e, colorId:x.raw.colorId||"", memo:htmlToText(x.raw.description), rem:reminderOf(x.raw), cal: x.cal.id };
+    base = { title:x.raw.summary||"", loc:x.raw.location||"", allDay:x.allDay, s:x.s, e:x.allDay ? addDays(x.e,-1) : x.e, colorId:x.raw.colorId||"", label:x.raw.eventLabelId||"", memo:htmlToText(x.raw.description), rem:reminderOf(x.raw), cal: x.cal.id };
   }
-  let colorId = base.colorId;
+  let colorId = base.colorId, label = base.label, swCal = base.cal;
   const ids = Object.keys(palette).sort((a,b) => Number(a)-Number(b));
+  const hasLabels = cid => Object.keys(labels[cid] || {}).length > 0;
+  const swHTML = cid => hasLabels(cid)
+    ? `<button type="button" class="def" data-l="" aria-label="カレンダーの色">標準</button>` + Object.entries(labels[cid]).map(([id,l]) => `<button type="button" data-l="${esc(id)}" style="--c:${esc(l.color)}" aria-label="${esc(l.name || colorName(l.color))}" title="${esc(l.name || colorName(l.color))}"></button>`).join("")
+    : `<button type="button" class="def" data-c="" aria-label="カレンダーの色">標準</button>` + ids.map(k => `<button type="button" data-c="${k}" style="--c:${palette[k].background}" aria-label="${colorName(palette[k].background)||"色 "+k}" title="${colorName(palette[k].background)}"></button>`).join("");
   const cals = writableCals();
   sheet.setAttribute("aria-label", isNew ? "新規予定" : "予定を編集");
   sheet.innerHTML = `
@@ -893,7 +911,7 @@ function renderEdit(x){
     </div>
     <div class="grp">
       ${isNew && cals.length > 1 ? `<div class="row"><span>カレンダー</span><select id="edCal" aria-label="カレンダー">${cals.map(c => `<option value="${esc(c.id)}" ${c.id===base.cal?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>` : ""}
-      <div class="row block"><span>色</span><span class="sw" id="edSw"><button type="button" class="def" data-c="" aria-label="カレンダーの色">標準</button>${ids.map(k => `<button type="button" data-c="${k}" style="--c:${palette[k].background}" aria-label="${colorName(palette[k].background)||"色 "+k}" title="${colorName(palette[k].background)}"></button>`).join("")}</span></div>
+      <div class="row block"><span>色</span><span class="sw" id="edSw">${swHTML(swCal)}</span><small class="note" id="edSwName"></small></div>
       <div class="row"><span>通知</span><select id="edRem" aria-label="通知">${REMIND.map(([v,l]) => `<option value="${v}" ${v===base.rem?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
     <div class="grp"><textarea id="edMemo" placeholder="メモ" aria-label="メモ">${esc(base.memo)}</textarea></div>
@@ -901,9 +919,14 @@ function renderEdit(x){
     <p class="sh-msg" id="shMsg"></p>`;
   const setTimesVis = () => { const a = $("#edAll").checked; $("#edST").hidden = $("#edET").hidden = a; };
   setTimesVis();
-  const paintSw = () => $("#edSw").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.c===colorId)));
+  const paintSw = () => {
+    let name = "";
+    $("#edSw").querySelectorAll("button").forEach(b => { const on = b.dataset.l !== undefined ? b.dataset.l === label : b.dataset.c === colorId; b.setAttribute("aria-pressed", String(on)); if (on) name = b.getAttribute("aria-label"); });
+    $("#edSwName").textContent = name;
+  };
   paintSw();
-  $("#edSw").onclick = e => { const b = e.target.closest("button"); if (!b) return; colorId = b.dataset.c; paintSw(); };
+  $("#edSw").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.l !== undefined) label = b.dataset.l; else colorId = b.dataset.c; paintSw(); };
+  $("#edCal") && ($("#edCal").onchange = e => { swCal = e.target.value; label = ""; colorId = ""; $("#edSw").innerHTML = swHTML(swCal); paintSw(); });
   $("#edAll").onchange = setTimesVis;
   $("#edSD").onchange = () => { if ($("#edED").value < $("#edSD").value) $("#edED").value = $("#edSD").value; };
   $("#edCancel").onclick = () => isNew ? closeSheet() : renderView();
@@ -924,7 +947,9 @@ function renderEdit(x){
     const loc = $("#edLoc").value.trim(), memo = $("#edMemo").value;
     if (isNew || loc !== base.loc) body.location = loc;
     if (isNew || memo !== base.memo) body.description = memo;
-    if (isNew ? colorId : colorId !== base.colorId) body.colorId = colorId || null;
+    const useLabels = hasLabels(isNew ? ($("#edCal")?.value || base.cal) : x.cal.id);
+    if (useLabels){ if (isNew ? label : label !== base.label) body.eventLabelId = label; }
+    else if (isNew ? colorId : colorId !== base.colorId) body.colorId = colorId || null;
     const rem = $("#edRem").value;
     if (isNew || rem !== base.rem){
       body.reminders = rem === "default" ? { useDefault: true } : rem === "none" ? { useDefault: false, overrides: [] } : { useDefault: false, overrides: [{ method: "popup", minutes: Number(rem) }] };
@@ -933,7 +958,7 @@ function renderEdit(x){
     if (!calId){ $("#shMsg").textContent = "書き込めるカレンダーが見つかりません。"; return; }
     const b = $("#edSave"); b.disabled = true; $("#shMsg").textContent = "保存しています…";
     try {
-      const url = `${CALAPI}/calendars/${encodeURIComponent(calId)}/events` + (isNew ? "" : `/${encodeURIComponent(x.raw.id)}`);
+      const url = `${CALAPI}/calendars/${encodeURIComponent(calId)}/events` + (isNew ? "" : `/${encodeURIComponent(x.raw.id)}`) + "?eventLabelVersion=1";
       await api(url, { method: isNew ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       closeSheet(); toast(isNew ? "予定を追加しました" : "予定を更新しました"); fetchRange(true);
     } catch(err){ b.disabled = false; $("#shMsg").textContent = errText(err, "保存"); }
